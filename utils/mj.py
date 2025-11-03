@@ -1328,8 +1328,8 @@ def get_bodies_in_contact(data: mj.MjData, model: mj.MjModel) -> List[Tuple[str,
         contact = data.contact[i]
         geom_ids_in_contact.append((contact.geom1, contact.geom2))
 
-    gids = [gid for gid in geom_ids_in_contact]
-    bids = [model.geom_bodyid[gid[0]] for gid in gids]
+    # gids = [gid for gid in geom_ids_in_contact]
+    # bids = [model.geom_bodyid[gid[0]] for gid in gids]
 
     body_names = [
         (
