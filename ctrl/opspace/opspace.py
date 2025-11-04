@@ -3,11 +3,11 @@ import numpy as np
 import spatialmath as sm
 import spatialmath.base as smb
 
-from core.robot import BaseRobot
+from base.robot import Robot
 
 
 class OpSpace:
-    def __init__(self, robot: BaseRobot, gravity_comp: bool = True) -> None:
+    def __init__(self, robot: Robot, gravity_comp: bool = True) -> None:
         self._data = robot.data
         self._model = robot.model
         self.gravity_comp = gravity_comp

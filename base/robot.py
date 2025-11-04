@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import List, Union
+from typing import List, Optional, Union
 
 import mujoco as mj
 import numpy as np
+import spatialmath as sm
 
 from utils.mj import (
     ObjType,
@@ -24,11 +25,20 @@ class Robot:
     to the robot's model, data, and control mechanisms.
     """
 
-    def __init__(self, model: mj.MjModel, data: mj.MjData, namespace: str):
+    def __init__(
+        self,
+        model: mj.MjModel,
+        data: mj.MjData,
+        namespace: str,
+        base_identifier: Optional[Union[int, str]] = None,
+    ):
         self._model = model
         self._data = data
         self._name = namespace
         self._info = RobotInfo(self._model, namespace)
+        self._base = (
+            self._info.body_ids[0] if base_identifier is None else base_identifier
+        )
 
     @property
     def name(self) -> str:
@@ -365,3 +375,21 @@ class Robot:
         return np.array(
             [get_joint_ddq(self.data, self.model, jn) for jn in self.info._joint_ids]
         ).flatten()
+
+    def ik(self, T_target: sm.SE3, q0: Optional[np.ndarray] = None) -> np.ndarray:
+        pass
+        # ik_tasks = [posture_task, finger_tasks]
+        # self.solver = "daqp"
+        # self.posture_task.set_target_from_configuration(self.ik_conf)
+
+    def fk(self, q: np.ndarray) -> None:
+        assert len(q) == self._info.n_joints, (
+            f"To compute the forward kinematics, the length of q must be equal to the number of joints in the robot, {len(q)=}, {self._info.n_joints=}"
+        )
+
+        _data_q = self.data.qpos[self._info.joint_indxs]
+        # overwrite qpos
+        self.data.qpos[self._info.joint_indxs] = q
+        mj.mj_forward(self.model, self.data)
+
+        self.data.qpos[self._info.joint_indxs] = _data_q

@@ -3,12 +3,18 @@ name = "mj-sim"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
+    "mink[examples]>=0.0.13",
     "mujoco>=3.3.7",
     "mujoco-mjx>=3.3.7",
+    "mypy>=1.18.2",
     "numpy>=2.3.4",
+    "ompl",
     "open3d>=0.19.0",
     "opencv-python>=4.11.0.86",
     "spatialmath-python>=1.1.14",
 ]
+
+[tool.uv.sources]
+ompl = { path = "tmp/ompl-1.7.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }
