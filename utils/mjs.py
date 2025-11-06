@@ -11,3 +11,15 @@ def cable() -> mj.MjSpec:
 
 def cloth() -> mj.MjSpec:
     pass
+
+
+def deform_3d() -> mj.MjSpec:
+    pass
+
+
+def deform_3d_custom() -> mj.MjSpec:
+    pass
+
+
+def replicate() -> mj.MjSpec:
+    pass
