@@ -36,9 +36,7 @@ class Robot:
         self._data = data
         self._name = namespace
         self._info = RobotInfo(self._model, namespace)
-        self._base = (
-            self._info.body_ids[0] if base_identifier is None else base_identifier
-        )
+        self._base = 0 if base_identifier is None else base_identifier
 
     @property
     def name(self) -> str:
@@ -382,14 +380,30 @@ class Robot:
         # self.solver = "daqp"
         # self.posture_task.set_target_from_configuration(self.ik_conf)
 
-    def fk(self, q: np.ndarray) -> None:
+    def fk(
+        self,
+        q: np.ndarray,
+        sites: Optional[Union[str, int]] = None,
+        base_frame: Optional[Union[sm.SE3, int, str]] = None,
+    ) -> Union[sm.SE3, list[sm.SE3]]:
         assert len(q) == self._info.n_joints, (
             f"To compute the forward kinematics, the length of q must be equal to the number of joints in the robot, {len(q)=}, {self._info.n_joints=}"
         )
+
+        base_frame = self._base if base_frame is None else base_frame
+
+        sites = sites if sites is not None else self._info.site_ids
 
         _data_q = self.data.qpos[self._info.joint_indxs]
         # overwrite qpos
         self.data.qpos[self._info.joint_indxs] = q
         mj.mj_forward(self.model, self.data)
 
+        T = [
+            get_pose(self.model, self.data, base_frame, ObjType.BODY).inv()
+            @ get_pose(self.model, self.data, sid, ObjType.SITE)
+            for sid in self._info.site_ids
+        ]
+
         self.data.qpos[self._info.joint_indxs] = _data_q
+        return T if len(T) > 1 else T[0]

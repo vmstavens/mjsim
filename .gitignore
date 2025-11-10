@@ -2,6 +2,9 @@
 
 typings/
 tmp/
+MUJOCO_LOG.TXT
+sb.ipynb
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

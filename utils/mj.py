@@ -368,11 +368,7 @@ def does_exist(
                 f"{obj_type.name} name '{identifier}' not found in the model. The model contain the {obj_type.name}s {get_names(model, obj_type)}"
             )
     elif isinstance(identifier, int):
-        exists = (
-            True
-            if mj.mj_id2name(model, obj_type.value, identifier) is not None
-            else False
-        )
+        exists = (identifier < get_number_of(model, obj_type)) and (identifier >= 0)
         if not exists:
             raise ValueError(
                 f"{obj_type.name} id '{identifier}' not found in the model. The model contain the {obj_type.name}s {get_ids(model, obj_type)}"
