@@ -3,7 +3,7 @@ import numpy as np
 import spatialmath as sm
 import spatialmath.base as smb
 
-from base.robot import Robot
+from mjsim.base.robot import Robot
 
 
 class OpSpace:

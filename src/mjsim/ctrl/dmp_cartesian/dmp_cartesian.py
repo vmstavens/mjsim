@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from typing import List, Optional, Tuple
 
@@ -5,9 +7,9 @@ import numpy as np
 import spatialmath as sm
 import spatialmath.base as smb
 
-from ctrl.dmp_cartesian.canonical_system import CanonicalSystem
-from ctrl.dmp_position import DMPPosition
-from ctrl.dmp_quaternion import DMPQuaternion
+from mjsim.ctrl.dmp_cartesian.canonical_system import CanonicalSystem
+from mjsim.ctrl.dmp_position import DMPPosition
+from mjsim.ctrl.dmp_quaternion import DMPQuaternion
 
 
 class DMPCartesian:
@@ -66,9 +68,7 @@ class DMPCartesian:
         tau: float,
         force_disturbance: np.ndarray = np.array([0, 0, 0]),
         torque_disturbance: np.ndarray = np.array([0, 0, 0]),
-    ) -> Tuple[
-        np.ndarray, np.ndarray, np.ndarray, np.quaternion, np.ndarray, np.ndarray
-    ]:
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Perform a single DMP step.
 
@@ -116,7 +116,7 @@ class DMPCartesian:
         dp = np.empty((n_steps, 3))
         ddp = np.empty((n_steps, 3))
 
-        q = np.empty((n_steps,), dtype=np.quaternion)
+        q = np.empty((n_steps, 4))
         omega = np.empty((n_steps, 3))
         d_omega = np.empty((n_steps, 3))
 

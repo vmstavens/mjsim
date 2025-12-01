@@ -5,6 +5,17 @@ from xml.dom import minidom
 import mujoco as mj
 
 
+def _spec_from_string(xml_str: str) -> mj.MjSpec:
+    """
+    Build an MjSpec from XML while keeping the original XML string around.
+    """
+    spec = mj.MjSpec().from_string(xml_str)
+    setattr(spec, "_xml_string", xml_str)
+    if not hasattr(spec, "to_xml_string"):
+        spec.to_xml_string = lambda s=spec: xml_str  # type: ignore[attr-defined]
+    return spec
+
+
 def empty_scene(sim_name: str = "mj_sim", multiccd: bool = False) -> mj.MjSpec:
     multiccd = "enable" if multiccd else "disable"
 
@@ -48,7 +59,7 @@ def empty_scene(sim_name: str = "mj_sim", multiccd: bool = False) -> mj.MjSpec:
         </worldbody>
     </mujoco>
     """
-    return mj.MjSpec().from_string(_XML)
+    return _spec_from_string(_XML)
 
 
 def dlo(
@@ -280,7 +291,7 @@ def dlo(
             ET.tostring(mujoco, encoding="unicode")
         ).toprettyxml(indent="  ")
 
-    return mj.MjSpec().from_string(xml_str)
+    return _spec_from_string(xml_str)
 
 
 def dqo(
@@ -476,12 +487,6 @@ def dqo(
         initial=initial,
     )
 
-    # Add plugin to composite
-    # plugin = ET.SubElement(composite, "plugin", plugin="mujoco.elasticity.grid")
-    # ET.SubElement(plugin, "config", key="stretch", value=str(stretch))
-    # ET.SubElement(plugin, "config", key="bend", value=str(bend))
-    # ET.SubElement(plugin, "config", key="shear", value=str(shear))
-
     # Create joint attributes with defaults and additional joint_args
     joint_attribs = {
         "kind": "main",
@@ -526,13 +531,25 @@ def dqo(
             ET.tostring(mujoco, encoding="unicode")
         ).toprettyxml(indent="  ")
 
-    return mj.MjSpec().from_string(xml_str)
+    return _spec_from_string(xml_str)
 
 
-def dco() -> mj.MjSpec: ...
+def dco(**kwargs) -> mj.MjSpec:
+    """
+    Convenience alias for a cable-like deformable object.
+
+    Any keyword arguments are forwarded to :func:`cable`.
+    """
+    return cable(**kwargs)
 
 
-def dmo() -> mj.MjSpec: ...
+def dmo(**kwargs) -> mj.MjSpec:
+    """
+    Convenience alias for a cloth-like deformable object.
+
+    Any keyword arguments are forwarded to :func:`cloth`.
+    """
+    return cloth(**kwargs)
 
 
 def cable(
@@ -684,19 +701,66 @@ def cloth(
     )
 
 
-def deform_3d() -> mj.MjSpec:
-    pass
-
-
-def deform_3d_custom() -> mj.MjSpec:
-    pass
-
-
-def replicate() -> mj.MjSpec:
+def deform_3d(
+    model_name: str = "soft_block",
+    prefix: str | None = None,
+    resolution: int = 5,
+    size: float = 0.25,
+    stiffness: float = 2.0e4,
+    shear: float = 1.0e4,
+    bend: float = 2.0e3,
+) -> mj.MjSpec:
     """
-    https://github.com/google-deepmind/mujoco/tree/main/model/replicate
+    Create a small volumetric deformable block.
     """
-    pass
+    prefix = f"{model_name}:" if prefix is None else prefix
+    return dqo(
+        model_name=model_name,
+        prefix=prefix,
+        count=[resolution, resolution, resolution],
+        size=size,
+        initial="free",
+        stretch=stiffness,
+        bend=bend,
+        shear=shear,
+        segment_size=size / (resolution * 2),
+        segment_geom_type=mj.mjtGeom.mjGEOM_BOX,
+    )
+
+
+def deform_3d_custom(
+    count: list[int],
+    size: float,
+    stretch: float,
+    bend: float,
+    shear: float,
+    **kwargs,
+) -> mj.MjSpec:
+    """
+    Flexible helper that forwards directly to :func:`dqo`.
+    """
+    return dqo(
+        model_name=kwargs.pop("model_name", "custom_flex"),
+        prefix=kwargs.pop("prefix", "flex:"),
+        count=count,
+        size=size,
+        initial=kwargs.pop("initial", "free"),
+        stretch=stretch,
+        bend=bend,
+        shear=shear,
+        segment_size=kwargs.pop("segment_size", size / max(count)),
+        segment_geom_type=kwargs.pop(
+            "segment_geom_type", mj.mjtGeom.mjGEOM_BOX
+        ),
+        **kwargs,
+    )
+
+
+# def replicate() -> mj.MjSpec:
+#     """
+#     https://github.com/google-deepmind/mujoco/tree/main/model/replicate
+#     """
+#     pass
 
 
 def weld(
@@ -716,3 +780,194 @@ def weld(
         solref=solref,
     )
     return scene
+
+
+def replicate(
+    model_name: str = "replicated",
+    prefix: str = "replicate:",
+    count: int = 1,
+    sep: str = " ",
+    euler: str = "0 0 0",
+    pos: str = "0 0 0",
+    geom_type: str = "box",
+    geom_size: str = "0.01 0.01 0.01",
+    geom_pos: str = "0 0 0",
+    geom_friction: str = "0.2 0.2 0.2",
+    geom_solref: str = "0.000000001 1",
+    **kwargs,
+) -> mj.MjSpec:
+    """
+    Create a replicated geometry model using MuJoCo's replicate composite type.
+
+    This function generates multiple copies of a geometry with specified separation
+    and transformation between each copy.
+
+    Args:
+        model_name: Name of the model.
+        prefix: Prefix for composite elements.
+        count: Number of replications.
+        sep: Separation between replications (space-separated XYZ or "hole:prefix").
+        euler: Euler angles for each replication (space-separated XYZ rotations in degrees).
+        pos: Initial position of the composite.
+        geom_type: Type of geometry ("box", "sphere", "capsule", "cylinder", "ellipsoid").
+        geom_size: Size parameters for the geometry.
+        geom_pos: Position offset for the geometry relative to its body.
+        geom_friction: Friction coefficients (sliding, torsional, rolling).
+        geom_solref: Solver reference parameters for constraint stabilization.
+        **kwargs: Additional geom attributes (e.g., rgba, mass, condim).
+
+    Returns:
+        mj.MjSpec: MuJoCo model specification object.
+
+    Examples:
+        >>> # Create a simple chain of boxes
+        >>> chain = replicate(
+        ...     count=5,
+        ...     sep="0.02 0 0",
+        ...     geom_size="0.01 0.01 0.05"
+        ... )
+
+        >>> # Create a spiral pattern
+        >>> spiral = replicate(
+        ...     count=20,
+        ...     sep="hole:spiral",
+        ...     euler="0 0 18",  # 18 degree rotation each step
+        ...     geom_type="capsule",
+        ...     geom_size="0.005 0.02",
+        ...     geom_rgba="1 0 0 1"
+        ... )
+    """
+    # Input validation
+    assert count > 0, f"count must be positive, got {count=}"
+    assert geom_type in {"box", "sphere", "capsule", "cylinder", "ellipsoid"}, (
+        f"Invalid geom_type: {geom_type}"
+    )
+
+    # Create XML structure
+    mujoco = ET.Element("mujoco", model=model_name)
+    worldbody = ET.SubElement(mujoco, "worldbody")
+
+    # Create body with initial position
+    body = ET.SubElement(worldbody, "body", pos=pos, euler=euler)
+
+    # Create composite with replicate type
+    composite = ET.SubElement(
+        body,
+        "composite",
+        type="replicate",
+        prefix=prefix,
+        count=str(count),
+        sep=sep,
+        euler=euler,
+    )
+
+    # Create geom with specified attributes and any additional kwargs
+    geom_attribs = {
+        "type": geom_type,
+        "pos": geom_pos,
+        "size": geom_size,
+        "friction": geom_friction,
+        "solref": geom_solref,
+    }
+
+    # Add any additional geom attributes from kwargs
+    for key, value in kwargs.items():
+        geom_attribs[key] = str(value)
+
+    ET.SubElement(composite, "geom", **geom_attribs)
+
+    # Convert to string with pretty printing
+    try:
+        ET.indent(mujoco)
+        xml_str = ET.tostring(mujoco, encoding="unicode", method="xml")
+    except AttributeError:
+        xml_str = minidom.parseString(ET.tostring(mujoco)).toprettyxml(indent="  ")
+
+    return _spec_from_string(xml_str)
+
+
+def pipe(
+    length: float = 0.1,
+    count: int = 30,
+    segment_length: float = 0.1,
+    radius: float = 0.004,
+    thickness: float = 0.001,
+    model_name: str = "pipe",
+    **kwargs,
+) -> mj.MjSpec:
+    """
+    Create a pipe-like structure using replicated box geometries.
+
+    This is a specialized wrapper around replicate() that creates a pipe
+    composed of multiple box segments arranged in a circular pattern.
+
+    Args:
+        length: Total length of the pipe segment.
+        count: Number of segments in the pipe.
+        segment_length: Length of each individual segment.
+        radius: Radius of the pipe.
+        thickness: Thickness of the pipe walls.
+        model_name: Name of the pipe model.
+        **kwargs: Additional arguments passed to replicate().
+
+    Returns:
+        mj.MjSpec: MuJoCo model specification object.
+
+    Examples:
+        >>> # Create a basic pipe
+        >>> pipe_spec = pipe()
+
+        >>> # Create a longer pipe with more segments
+        >>> pipe_spec = pipe(
+        ...     length=0.2,
+        ...     count=50,
+        ...     radius=0.01
+        ... )
+
+        >>> # Create a pipe with custom appearance
+        >>> pipe_spec = pipe(
+        ...     geom_rgba="0.8 0.2 0.2 1",
+        ...     geom_friction="0.5 0.1 0.1"
+        ... )
+    """
+    # Calculate geometry size for box segments
+    geom_size = f"{radius} {thickness} {segment_length / 2}"
+
+    # Use replicate to create the pipe structure
+    return replicate(
+        model_name=model_name,
+        prefix="pipe:",
+        count=count,
+        sep="hole:pipe",  # Circular hole pattern
+        euler="0 0 0",  # No additional rotation between segments
+        pos="0 0 0",
+        geom_type="box",
+        geom_size=geom_size,
+        geom_pos=f"0 -{radius + thickness / 2} 0",  # Position to form circle
+        geom_friction=kwargs.pop("geom_friction", "0.2 0.2 0.2"),
+        geom_solref=kwargs.pop("geom_solref", "0.000000001 1"),
+        **kwargs,
+    )
+
+
+# Alternative pipe implementation using the original XML approach for compatibility
+def pipe_legacy(length: float = 0.1, **kwargs) -> mj.MjSpec:
+    """
+    Legacy pipe implementation using the original XML string approach.
+
+    This maintains compatibility with existing code that expects the exact
+    XML structure from the original pipe function.
+    """
+    count = kwargs.pop("count", 30)
+    _XML = f"""
+    <mujoco>
+        <worldbody>
+            <body euler="0 0 0" pos="0 0 0">
+                <replicate sep="hole:" count="{count}" euler="0 0 20">
+                    <geom type="box" solref="0.000000001 1" pos="0 -0.018 0" size=".004 .001 {length / 2}" friction="0.2 0.2 0.2" />
+                </replicate>
+            </body>
+        </worldbody>
+    </mujoco>
+    """
+    return _spec_from_string(_XML)

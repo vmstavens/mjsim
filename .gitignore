@@ -4,6 +4,8 @@ typings/
 tmp/
 MUJOCO_LOG.TXT
 sb.ipynb
+generated_assets/
+src/mjsim/.typings/
 
 
 # Byte-compiled / optimized / DLL files

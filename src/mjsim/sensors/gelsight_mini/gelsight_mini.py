@@ -4,10 +4,9 @@ from typing import Tuple, Union
 import cv2
 import mujoco as mj
 import numpy as np
+from mj_sim.sensors import Camera
 from PIL import Image
 from scipy.ndimage import gaussian_filter
-
-from sensors import Camera
 
 
 class GelSightMini(Camera):

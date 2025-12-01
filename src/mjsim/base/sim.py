@@ -203,12 +203,14 @@ class BaseSim(ABC):
             while True:
                 # mj.mj_step(self.model, self.data)
                 # if a task is done delete the
-                for t in threads:
+                for idx in reversed(range(len(threads))):
+                    t = threads[idx]
                     if not t.is_alive():
                         logger.info(
                             f"[{Path(__file__).stem}]: Process '{t.name}' terminated successfully..."
                         )
-                        del threads[i], sim_syncs[i]
+                        threads.pop(idx)
+                        sim_syncs.pop(idx)
 
                 # wait for all sim synchs to acquire their lock i.e.
                 # all threads have successfully completed their last step
@@ -250,12 +252,14 @@ class BaseSim(ABC):
                     self.keyboard_callback(key_queue.get())
 
                 # if a task is done delete the
-                for t in threads:
+                for idx in reversed(range(len(threads))):
+                    t = threads[idx]
                     if not t.is_alive():
                         logger.info(
                             f"[{Path(__file__).stem}]: Process '{t.name}' terminated successfully..."
                         )
-                        del threads[i], sim_syncs[i]
+                        threads.pop(idx)
+                        sim_syncs.pop(idx)
 
                 # wait for all sim synchs to acquire their lock i.e.
                 # all threads have successfully completed their last step

@@ -11,7 +11,7 @@ import numpy as np
 import spatialmath as sm
 import spatialmath.base as smb
 
-from utils.sm import make_tf
+from mjsim.utils.sm import make_tf
 
 
 class JointType(Enum):

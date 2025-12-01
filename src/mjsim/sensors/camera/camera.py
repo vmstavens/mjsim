@@ -10,8 +10,8 @@ import mujoco as mj
 import numpy as np
 import spatialmath as sm
 
-from utils.mj import ObjType, get_pose, name2id
-from utils.vis import pcwrite
+from mjsim.utils.mj import ObjType, get_pose, name2id
+from mjsim.utils.vis import pcwrite
 
 logging.basicConfig(level=logging.INFO)  # This adds a default handler
 relative_path = os.path.relpath(__file__)  # Relative to current working directory

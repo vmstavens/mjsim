@@ -1,21 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "mj-sim"
+name = "mjsim"
 version = "0.1.0"
-description = "Add your description here"
+description = "MuJoCo utilities for controllers, planners, deformable objects, and sensors."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Victor M. Staven" }]
 dependencies = [
+    "cython>=3.2.0",
     "mink[examples]>=0.0.13",
     "mujoco>=3.3.7",
     "mujoco-mjx>=3.3.7",
-    "mypy>=1.18.2",
-    "numpy>=2.3.4",
-    "ompl",
+    "numpy>=2.3.0",
+    "ompl>=1.7.0",
     "open3d>=0.19.0",
     "opencv-python>=4.11.0.86",
     "robot-descriptions>=1.21.0",
+    "scipy>=1.11.0",
     "spatialmath-python>=1.1.14",
 ]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
 
-[tool.uv.sources]
-ompl = { path = "tmp/ompl-1.7.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }
+[project.optional-dependencies]
+dev = ["pytest>=8.3.0", "mypy>=1.8.0", "ruff>=0.6.0", "pybind11-stubgen>=2.5.1"]
+stubs = ["pybind11-stubgen>=2.5.1"]
+
+[project.urls]
+Homepage = "https://gitlab.sdu.dk/sdurobotics/teaching/mj_sim"
+Repository = "https://gitlab.sdu.dk/sdurobotics/teaching/mj_sim"
+
+[tool.hatch.build]
+packages = [{ include = "mjsim", from = "src" }]
+exclude = ["tmp", "prier", "stubs", "typings", ".venv", "docs", "sb.ipynb", "sb.py"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/mjsim/assets" = "mjsim/assets"
