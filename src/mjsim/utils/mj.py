@@ -1603,37 +1603,39 @@ class ContactState:
         )
 
 
+def is_robot_entity(entity_name: str, robot_name: str) -> bool:
+    """
+    Check if an entity belongs directly to the robot namespace (excluding nested components).
+
+    The expected convention is that each robot entity is named ``<namespace>/<object>``.
+    Attachments such as grippers often introduce a deeper hierarchy like
+    ``<namespace>/<attachment>/<object>``. This helper returns ``True`` only for the
+    direct children of ``namespace`` so gripper bodies are not mixed into the base robot.
+
+    Args:
+        entity_name (str): The name of the entity to check.
+        robot_name (str): The namespace/prefix of the robot.
+
+    Returns:
+        bool: True if the entity belongs to the robot, False otherwise.
+    """
+    # Normalize and drop empty path parts (to ignore leading/trailing slashes)
+    entity_parts = [p for p in entity_name.lower().split("/") if p]
+    robot_parts = [p for p in robot_name.lower().split("/") if p]
+    if not robot_parts:
+        return False
+
+    if entity_parts[: len(robot_parts)] != robot_parts:
+        return False
+
+    # Only accept direct children of the namespace (one extra path element)
+    return len(entity_parts) == len(robot_parts) + 1
+
+
 class RobotInfo:
     def __init__(self, model: mj.MjModel, name: str):
         self.name = name
         self.m = model
-
-        def is_robot_entity(entity_name: str, robot_name: str):
-            """
-            Check if an entity belongs to the robot (and not to a nested component).
-
-            Args:
-                entity_name (str): The name of the entity to check.
-                robot_name (str): The name of the robot or tool.
-
-            Returns:
-                bool: True if the entity belongs to the robot, False otherwise.
-            """
-            # Normalize names to lowercase for case-insensitive comparison
-            entity_name = entity_name.lower()
-            robot_name = robot_name.lower()
-
-            namespace_list = entity_name.split("/")
-            if len(namespace_list) == 1 or namespace_list[-1] == "":
-                return False
-
-            if robot_name not in namespace_list:
-                return False
-            robot_indx = namespace_list.index(robot_name)
-            if len(namespace_list) == robot_indx + 2:
-                return True
-            else:
-                return False
 
         # Use list comprehensions to filter bodies and geometries by name
         self._body_ids = [
