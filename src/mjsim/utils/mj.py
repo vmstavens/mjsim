@@ -1279,7 +1279,7 @@ def apply_wrench(
     data.xfrc_applied[target_id, :] = wrench
 
 
-def get_geoms_in_contact(data: mj.MjData, model: mj.MjModel) -> List[Tuple[str, str]]:
+def get_geoms_in_contact(model: mj.MjModel, data: mj.MjData) -> List[Tuple[str, str]]:
     """
     Retrieve a list of geometry pairs currently in contact in the MuJoCo simulation.
 
@@ -1289,10 +1289,10 @@ def get_geoms_in_contact(data: mj.MjData, model: mj.MjModel) -> List[Tuple[str, 
 
     Args
     ----------
-    data : mj.MjData
-        The MuJoCo data object containing the current state of the simulation.
     model : mj.MjModel
         The MuJoCo model object containing the simulation model.
+    data : mj.MjData
+        The MuJoCo data object containing the current state of the simulation.
 
     Returns
     ----------
@@ -1317,7 +1317,7 @@ def get_geoms_in_contact(data: mj.MjData, model: mj.MjModel) -> List[Tuple[str, 
     return contact_states
 
 
-def get_bodies_in_contact(data: mj.MjData, model: mj.MjModel) -> List[Tuple[str, str]]:
+def get_bodies_in_contact(model: mj.MjModel, data: mj.MjData) -> List[Tuple[str, str]]:
     geom_ids_in_contact = []
 
     for i in range(data.ncon):
@@ -1338,7 +1338,7 @@ def get_bodies_in_contact(data: mj.MjData, model: mj.MjModel) -> List[Tuple[str,
     return body_names
 
 
-def get_joint_pos(data: mj.MjData, model: mj.MjModel, joint_name: str) -> np.ndarray:
+def get_joint_pos(model: mj.MjModel, data: mj.MjData, joint_name: str) -> np.ndarray:
     """
     Retrieve the position of a specified joint in the MuJoCo simulation.
 
@@ -1346,10 +1346,10 @@ def get_joint_pos(data: mj.MjData, model: mj.MjModel, joint_name: str) -> np.nda
 
     Args:
     ----------
-    data : mj.MjData
-        The MuJoCo data object containing simulation data.
     model : mj.MjModel
         The MuJoCo model object containing the simulation model.
+    data : mj.MjData
+        The MuJoCo data object containing simulation data.
     joint_name : str
         The name of the joint whose position is to be retrieved.
 

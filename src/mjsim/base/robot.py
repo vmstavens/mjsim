@@ -468,23 +468,43 @@ class Robot:
                 # Update configuration to compute FK
                 self._ik_conf.update(q_new)
 
+                def _translation(pose: sm.SE3) -> np.ndarray:
+                    """Return translation for both spatialmath and mink SE3 types."""
+                    if hasattr(pose, "translation"):
+                        return np.array(pose.translation()).reshape(-1)
+                    if hasattr(pose, "t"):
+                        return np.array(pose.t).reshape(-1)
+                    raise AttributeError("Pose does not expose translation or t")
+
+                def _rotation_matrix(pose: sm.SE3) -> np.ndarray:
+                    """Return rotation matrix for both spatialmath and mink SE3 types."""
+                    if hasattr(pose, "R"):
+                        return np.array(pose.R)
+                    if hasattr(pose, "rotation"):
+                        rot = pose.rotation()
+                        if hasattr(rot, "matrix"):
+                            return np.array(rot.matrix())
+                        if hasattr(rot, "as_matrix"):
+                            return np.array(rot.as_matrix())
+                    raise AttributeError("Pose does not expose R or rotation matrix")
+
                 for i, site_name in enumerate(site_names):
                     current_pose = self.fk(q_new, site_name, base_frame=self._base)
                     target_pose = targets_sm[i]
 
                     # Position error
                     pos_error = np.linalg.norm(
-                        current_pose.translation() - target_pose.translation()
+                        _translation(current_pose) - _translation(target_pose)
                     )
                     max_position_error = max(max_position_error, pos_error)
                     if pos_error > task_position_tolerance:
                         task_converged = False
 
                     # Orientation error (angle in radians)
-                    rot_error = current_pose.rotation().inv() * target_pose.rotation()
-                    angle_error = np.arccos(
-                        np.clip((np.trace(rot_error.matrix()) - 1) / 2, -1, 1)
-                    )
+                    cur_R = _rotation_matrix(current_pose)
+                    tgt_R = _rotation_matrix(target_pose)
+                    rot_error = cur_R.T @ tgt_R
+                    angle_error = np.arccos(np.clip((np.trace(rot_error) - 1) / 2, -1, 1))
                     max_orientation_error = max(max_orientation_error, angle_error)
                     if angle_error > task_orientation_tolerance:
                         task_converged = False
@@ -541,7 +561,9 @@ class Robot:
                 final_orientation_errors.append(angle_error)
 
             max_final_pos = max(final_position_errors) if final_position_errors else 0
-            max_final_rot = max(final_orientation_errors) if final_orientation_errors else 0
+            max_final_rot = (
+                max(final_orientation_errors) if final_orientation_errors else 0
+            )
 
             print(
                 f"IK reached maximum attempts ({max_attempts}) "

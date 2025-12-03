@@ -40,6 +40,10 @@ EchoSim().run(headless=True)
 - `examples/controller_dmp.py` – train and roll out a Cartesian DMP.
 - `examples/planner_rrt.py` – run a minimal OMPL RRT-Connect in joint and task space.
 - `examples/deformable_assets.py` – generate cable and cloth specs and export XML.
+- `examples/grasping_force_closure.py` – inspect grasp matrices and friction cones for a toy grasp.
+- `examples/cartesian_planning.py` – Cartesian RRT-Connect with a simple obstacle.
+- `examples/camera_capture.py` – render RGB/depth from a minimal MuJoCo scene.
+- `examples/ik_stub.py` – exercise `Robot.ik` using a stubbed mink backend.
 
 Run any example with `python examples/<file>.py`.
 

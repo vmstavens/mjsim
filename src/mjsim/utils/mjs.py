@@ -10,9 +10,32 @@ def _spec_from_string(xml_str: str) -> mj.MjSpec:
     Build an MjSpec from XML while keeping the original XML string around.
     """
     spec = mj.MjSpec().from_string(xml_str)
-    setattr(spec, "_xml_string", xml_str)
+    try:
+        setattr(spec, "_xml_string", xml_str)
+    except Exception:
+        # Some MjSpec implementations disallow setting new attributes; ignore in that case.
+        pass
     if not hasattr(spec, "to_xml_string"):
-        spec.to_xml_string = lambda s=spec: xml_str  # type: ignore[attr-defined]
+        try:
+            # Some bindings allow adding attributes to the class even if instances are frozen.
+            def _to_xml_string(self, xml: str = xml_str) -> str:
+                return getattr(self, "_xml_string", xml)
+
+            setattr(type(spec), "to_xml_string", _to_xml_string)
+        except Exception:
+            # As a last resort, wrap in a lightweight proxy with the expected method.
+            class _SpecProxy:
+                def __init__(self, inner, xml):
+                    self._inner = inner
+                    self._xml = xml
+
+                def __getattr__(self, name):
+                    return getattr(self._inner, name)
+
+                def to_xml_string(self):
+                    return self._xml
+
+            return _SpecProxy(spec, xml_str)
     return spec
 
 
