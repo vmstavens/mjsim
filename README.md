@@ -55,10 +55,10 @@ pytest
 ```
 
 ### IDE stubs
-The package tries to generate `.typings/` stubs inside the installed `mjsim` using `pybind11-stubgen` for `mujoco`, `ompl`, `open3d` (and `mink` if present) on first import. Set `MJSIM_SKIP_STUBGEN=1` to skip or rerun manually:
+During installation (via a `.pth` hook) and on first import the package tries to generate `typings/` stubs in the project root (or the install's `site-packages` root when the project root is unknown) using `pybind11-stubgen` for `mujoco`, `mujoco.mjx`, `ompl`, `open3d` (and `mink` if present). Set `MJSIM_SKIP_STUBGEN=1` to skip or rerun manually:
 ```bash
-pybind11-stubgen mujoco ompl open3d mink -o $(python - <<'PY'
-from pathlib import Path, PurePath; import mjsim; import sys
-print(Path(mjsim.__file__).parent / ".typings")
+pybind11-stubgen mujoco mujoco.mjx ompl open3d mink -o $(python - <<'PY'
+from mjsim._stubgen import _stub_root
+print(_stub_root())
 PY)
 ```

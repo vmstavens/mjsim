@@ -48,7 +48,7 @@ def main() -> None:
     cam = Camera(model, data, cam_name="front", width=320, height=240, save_dir="tmp/cam/")
 
     # Step once to ensure the scene is initialized.
-    mj.forward(model, data)
+    mj.mj_forward(model, data)
 
     rgb = cam.image
     depth = cam.depth_image

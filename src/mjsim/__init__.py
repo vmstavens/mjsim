@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
-import sys
 from importlib import util
-from pathlib import Path
+
+from mjsim._stubgen import add_existing_stubs_to_path, ensure_stubs
 
 _LIGHT_IMPORT = os.environ.get("MJSIM_LIGHT_IMPORT") == "1"
 
@@ -44,54 +42,9 @@ else:
     qplan = xplan = None  # type: ignore[assignment]
 
 
-def _maybe_generate_stubs() -> None:
-    """
-    Generate binary-extension stubs into the installed package for IDEs.
-
-    We keep this best-effort and skip when:
-    - pybind11-stubgen is unavailable
-    - the user opts out via MJSIM_SKIP_STUBGEN=1
-    - stubs were already generated (presence of .typings/.stamp)
-    """
-
-    if os.environ.get("MJSIM_SKIP_STUBGEN") == "1":
-        return
-
-    stubgen = shutil.which("pybind11-stubgen")
-    if stubgen is None:
-        return
-
-    stub_root = Path(__file__).resolve().parent / ".typings"
-    stamp = stub_root / ".stamp"
-    if stamp.exists():
-        return
-
-    stub_root.mkdir(exist_ok=True)
-
-    # Only include packages that are present to avoid needless failures.
-    targets = []
-    for pkg in ("mujoco", "ompl", "open3d"):
-        if util.find_spec(pkg):
-            targets.append(pkg)
-
-    # Add any other heavy binary modules we ship alongside.
-    if util.find_spec("mink"):
-        targets.append("mink")
-
-    if not targets:
-        return
-
-    cmd = [stubgen, *targets, "-o", str(stub_root)]
-    try:
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        stamp.write_text("\n".join(targets))
-    except Exception:
-        # Suppress failures to avoid impacting runtime; IDE users can rerun manually.
-        return
-
-
 if not _LIGHT_IMPORT:
-    _maybe_generate_stubs()
+    add_existing_stubs_to_path()
+    ensure_stubs()
 
 __all__ = [
     "BaseSim",
