@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 authors = [{ name = "Victor M. Staven" }]
 dependencies = [
     "cython>=3.2.0",
-    "mink[examples]>=0.0.13",
+    "mink>=0.0.13",
     "mujoco>=3.3.7",
     "mujoco-mjx>=3.3.7",
     "numpy>=2.3.0",
