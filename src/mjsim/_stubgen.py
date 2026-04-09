@@ -74,30 +74,29 @@ def ensure_stubs() -> None:
         return
 
     stub_root.mkdir(exist_ok=True)
+    output_dir = "./typings"
+    output_root = stub_root.parent
 
-    # Run per-module to isolate crashes; tolerate signature parsing errors.
-    succeeded: list[str] = []
-    for target in targets:
-        cmd = [
-            stubgen,
-            target,
-            "-o",
-            str(stub_root),
-            "--ignore-invalid-expressions=.*",
-            "--ignore-invalid-identifiers=.*",
-        ]
-        try:
-            subprocess.run(
-                cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-            succeeded.append(target)
-        except Exception:
-            continue
-
-    if not succeeded:
+    cmd = [
+        stubgen,
+        *targets,
+        "-o",
+        output_dir,
+        "--ignore-invalid-expressions=.*",
+        "--ignore-invalid-identifiers=.*",
+    ]
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            cwd=str(output_root),
+        )
+    except Exception:
         return
 
-    stamp.write_text("\n".join(succeeded))
+    stamp.write_text("\n".join(targets))
 
     _add_stub_path(stub_root)
 
@@ -108,3 +107,13 @@ def add_existing_stubs_to_path() -> None:
     stub_root = _stub_root()
     if (stub_root / ".stamp").exists():
         _add_stub_path(stub_root)
+
+
+def main() -> None:
+    """Run stub generation on demand."""
+
+    ensure_stubs()
+
+
+if __name__ == "__main__":
+    main()

@@ -55,7 +55,15 @@ pytest
 ```
 
 ### IDE stubs
-During installation (via a `.pth` hook) and on first import the package tries to generate `typings/` stubs in the project root (or the install's `site-packages` root when the project root is unknown) using `pybind11-stubgen` for `mujoco`, `mujoco.mjx`, `ompl`, `open3d` (and `mink` if present). Set `MJSIM_SKIP_STUBGEN=1` to skip or rerun manually:
+Generate `typings/` stubs on demand in the project root (or the install's
+`site-packages` root when the project root is unknown) using
+`pybind11-stubgen` for `mujoco`, `mujoco.mjx`, `ompl`, `open3d` (and `mink`
+if present):
+```bash
+python -m mjsim._stubgen
+```
+
+To run a custom command instead:
 ```bash
 pybind11-stubgen mujoco mujoco.mjx ompl open3d mink -o $(python - <<'PY'
 from mjsim._stubgen import _stub_root
