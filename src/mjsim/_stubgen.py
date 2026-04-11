@@ -71,27 +71,28 @@ def _run_stubgen(
         return False
 
     stub_root.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        stubgen,
-        *target_list,
-        "-o",
-        stub_root.name,
-        "--ignore-invalid-expressions=.*",
-        "--ignore-invalid-identifiers=.*",
-        "--ignore-all-errors",
-    ]
-    try:
-        subprocess.run(
-            cmd,
-            check=True,
-            stdout=subprocess.DEVNULL if quiet else None,
-            stderr=subprocess.DEVNULL if quiet else None,
-            cwd=str(stub_root.parent),
-        )
-    except Exception as exc:
-        if not quiet:
-            print(f"pybind11-stubgen failed: {exc}", file=sys.stderr)
-        return False
+    for target in target_list:
+        cmd = [
+            stubgen,
+            target,
+            "-o",
+            stub_root.name,
+            "--ignore-invalid-expressions=.*",
+            "--ignore-invalid-identifiers=.*",
+            "--ignore-all-errors",
+        ]
+        try:
+            subprocess.run(
+                cmd,
+                check=True,
+                stdout=subprocess.DEVNULL if quiet else None,
+                stderr=subprocess.DEVNULL if quiet else None,
+                cwd=str(stub_root.parent),
+            )
+        except Exception as exc:
+            if not quiet:
+                print(f"pybind11-stubgen failed for {target}: {exc}", file=sys.stderr)
+            return False
 
     return True
 
