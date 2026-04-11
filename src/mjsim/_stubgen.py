@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+from argparse import ArgumentParser
 from importlib import util
 from pathlib import Path
 from typing import Iterable
@@ -45,6 +46,53 @@ def _target_modules() -> Iterable[str]:
     return targets
 
 
+def _available_modules(modules: Iterable[str]) -> list[str]:
+    return [module for module in modules if util.find_spec(module)]
+
+
+def _run_stubgen(
+    stub_root: Path,
+    targets: Iterable[str],
+    *,
+    quiet: bool,
+) -> bool:
+    stubgen = shutil.which("pybind11-stubgen")
+    if stubgen is None:
+        if not quiet:
+            print("pybind11-stubgen was not found on PATH.", file=sys.stderr)
+        return False
+
+    target_list = list(targets)
+    if not target_list:
+        if not quiet:
+            print("No requested modules are importable.", file=sys.stderr)
+        return False
+
+    stub_root.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        stubgen,
+        *target_list,
+        "-o",
+        stub_root.name,
+        "--ignore-invalid-expressions=.*",
+        "--ignore-invalid-identifiers=.*",
+    ]
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL if quiet else None,
+            stderr=subprocess.DEVNULL if quiet else None,
+            cwd=str(stub_root.parent),
+        )
+    except Exception as exc:
+        if not quiet:
+            print(f"pybind11-stubgen failed: {exc}", file=sys.stderr)
+        return False
+
+    return True
+
+
 def ensure_stubs() -> None:
     """
     Generate binary-extension stubs into the installed package for IDEs.
@@ -65,35 +113,8 @@ def ensure_stubs() -> None:
         _add_stub_path(stub_root)
         return
 
-    stubgen = shutil.which("pybind11-stubgen")
-    if stubgen is None:
-        return
-
     targets = list(_target_modules())
-    if not targets:
-        return
-
-    stub_root.mkdir(exist_ok=True)
-    output_dir = "./typings"
-    output_root = stub_root.parent
-
-    cmd = [
-        stubgen,
-        *targets,
-        "-o",
-        output_dir,
-        "--ignore-invalid-expressions=.*",
-        "--ignore-invalid-identifiers=.*",
-    ]
-    try:
-        subprocess.run(
-            cmd,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            cwd=str(output_root),
-        )
-    except Exception:
+    if not _run_stubgen(stub_root, targets, quiet=True):
         return
 
     stamp.write_text("\n".join(targets))
@@ -109,10 +130,39 @@ def add_existing_stubs_to_path() -> None:
         _add_stub_path(stub_root)
 
 
-def main() -> None:
-    """Run stub generation on demand."""
+def main(argv: list[str] | None = None) -> None:
+    """Run stub generation on demand from the current working directory."""
 
-    ensure_stubs()
+    parser = ArgumentParser(
+        prog="mjsim-stubgen",
+        description="Generate pybind11 stubs for MuJoCo into ./typings.",
+    )
+    parser.add_argument(
+        "modules",
+        nargs="*",
+        default=["mujoco"],
+        help="Modules to generate stubs for. Defaults to mujoco.",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=Path("typings"),
+        type=Path,
+        help="Output directory. Defaults to ./typings.",
+    )
+    args = parser.parse_args(argv)
+
+    stub_root = args.output if args.output.is_absolute() else Path.cwd() / args.output
+    targets = _available_modules(args.modules)
+    missing = sorted(set(args.modules) - set(targets))
+    if missing:
+        print(
+            "Skipping modules that are not importable: " + ", ".join(missing),
+            file=sys.stderr,
+        )
+
+    if not _run_stubgen(stub_root, targets, quiet=False):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

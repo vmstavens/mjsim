@@ -42,6 +42,9 @@ stubs = ["pybind11-stubgen>=2.5.1"]
 Homepage = "https://github.com/vmstavens/mjsim"
 Repository = "https://github.com/vmstavens/mjsim"
 
+[project.scripts]
+mjsim-stubgen = "mjsim._stubgen:main"
+
 # [tool.uv.build]
 # package-dir = { "" = "src" }
 # packages = ["mjsim"]

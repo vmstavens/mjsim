@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+import sys
 from importlib import util
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mjsim._stubgen import add_existing_stubs_to_path, ensure_stubs
-import mjsim.ctrl as ctrl
 
 if TYPE_CHECKING:
     # Static-only imports so editors can resolve signatures and docstrings.
@@ -18,9 +19,11 @@ if TYPE_CHECKING:
     from mjsim.utils.mjs import cable, cloth, empty_scene, pipe, replicate
     from mjsim.utils.ompl import qplan, xplan
 
-_LIGHT_IMPORT = os.environ.get("MJSIM_LIGHT_IMPORT") == "1"
+_RUNNING_STUBGEN_CLI = Path(sys.argv[0]).stem == "mjsim-stubgen"
+_LIGHT_IMPORT = os.environ.get("MJSIM_LIGHT_IMPORT") == "1" or _RUNNING_STUBGEN_CLI
 
 if not _LIGHT_IMPORT:
+    import mjsim.ctrl as ctrl
     from mjsim.ctrl import DMPCartesian, DMPPosition, DMPQuaternion, OpSpace
 
     # Only import modules requiring MuJoCo when available and not in light mode.
@@ -50,6 +53,7 @@ if not _LIGHT_IMPORT:
     else:
         qplan = xplan = None  # type: ignore[assignment]
 else:
+    ctrl = None  # type: ignore[assignment]
     DMPCartesian = DMPPosition = DMPQuaternion = OpSpace = None  # type: ignore[assignment]
     Robot = BaseSim = SimSync = sleep = None  # type: ignore[assignment]
     get_pose = None  # type: ignore[assignment]
