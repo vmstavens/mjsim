@@ -76,6 +76,7 @@ def _run_stubgen(
         stub_root.name,
         "--ignore-invalid-expressions=.*",
         "--ignore-invalid-identifiers=.*",
+        "--ignore-all-errors",
     ]
     try:
         subprocess.run(
