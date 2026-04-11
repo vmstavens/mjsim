@@ -1048,7 +1048,7 @@ requires-dist = [
     { name = "mujoco", specifier = ">=3.3.7" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "numpy", specifier = ">=2.3.0" },
-    { name = "ompl", specifier = ">=1.7.0" },
+    { name = "ompl", specifier = ">=2.0.0" },
     { name = "open3d", specifier = ">=0.19.0" },
     { name = "opencv-python", specifier = ">=4.11.0.86" },
     { name = "pybind11-stubgen", specifier = ">=2.5.5" },
@@ -1263,17 +1263,21 @@ wheels = [
 
 [[package]]
 name = "ompl"
-version = "1.7.0"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/98/3835f3904ee2840dc99d559be918af63a55c826eede56fd682f2bedb6820/ompl-1.7.0-cp311-cp311-macosx_15_0_arm64.whl", hash = "sha256:e4ce273413d16ceb5c3e4cf01a3039dcdd1451767b442360d5509e0407bf48cb", size = 19334419, upload-time = "2025-04-12T21:41:34.175Z" },
-    { url = "https://files.pythonhosted.org/packages/00/86/189b9e782ee9e7b90612f51f6f5bdceeda9358213d14cbce85c2365ed45d/ompl-1.7.0-cp311-cp311-macosx_15_0_x86_64.whl", hash = "sha256:6b2a8d02da05b8ff63176373326b44bf48516e9d38dddb6a356e8e369ae3d145", size = 24723144, upload-time = "2025-04-12T21:41:42.298Z" },
-    { url = "https://files.pythonhosted.org/packages/94/8d/2c76711fc01109887ccc44ed5ce7e18aed5cafd65e674a8d7b6e08bac1b4/ompl-1.7.0-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:8a80ba78a3a3f8a8063a4b6afcffd2c2630f211f91f52ca0ca573005023936c7", size = 28989597, upload-time = "2025-04-12T21:41:54.049Z" },
-    { url = "https://files.pythonhosted.org/packages/72/5a/1effa9598c946c3fa70ce5e87d3c878077cd4725f8e92cd054191d6811f9/ompl-1.7.0-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:45427665ad6475463c5ebd1258b8326a8b298b3d411816201a85229db4ae656a", size = 28181448, upload-time = "2025-04-12T21:42:02.306Z" },
-    { url = "https://files.pythonhosted.org/packages/9f/bd/5e6bf3005ce75fc5f8887e02b582d4498126bdf83e67427ad9a61402b99b/ompl-1.7.0-cp312-cp312-macosx_15_0_arm64.whl", hash = "sha256:4d0aa8d6e4b1fbdce3497a9598670420cc9104f22987ecc9491f6c5c435a6619", size = 19425013, upload-time = "2025-04-12T21:42:08.548Z" },
-    { url = "https://files.pythonhosted.org/packages/cb/21/aafbbeaf90ae0d67b0390c61a00c0bd5848f8e60f8d230c8f4f04893c54b/ompl-1.7.0-cp312-cp312-macosx_15_0_x86_64.whl", hash = "sha256:acfe8cdd7234668097ef110d25b4108bfb615602e0c5e6a7aad562c281982918", size = 24930843, upload-time = "2025-04-12T21:42:15.662Z" },
-    { url = "https://files.pythonhosted.org/packages/60/1f/8eb9dfe97b31ad15713e92c4dd461cb48e575ab607caca451a5c53988f25/ompl-1.7.0-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:b54c49d9e41388f42fa8c1dac4fa07c457cd70bc7eea8c5db16b2ede109c4709", size = 29079086, upload-time = "2025-04-12T21:42:24.291Z" },
-    { url = "https://files.pythonhosted.org/packages/6b/79/cd21a285c74824bde1919e2e674a5fa69ebd4ddeace0b0f5fd54401a8d62/ompl-1.7.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:66dff892213cfff13b7b66cf39fa5a04cb6b333be0ead3fbb22a0be10b503b21", size = 28358999, upload-time = "2025-04-12T21:42:33.082Z" },
+    { url = "https://files.pythonhosted.org/packages/84/b9/1f8687732e0197e8e6d45955556ab85229a7da4b6d6439e82a393290f71f/ompl-2.0.0-cp311-cp311-macosx_15_0_arm64.whl", hash = "sha256:07164e2f4d397842ec4da8b237ba8c2f8698a61ae4b49e5e8cb22a5cf703d9c3", size = 2279130, upload-time = "2026-04-07T01:32:54.752Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/82/a68c8803ba9d87262775d93658ede64d40aecd691741f13064a4ba285c7f/ompl-2.0.0-cp311-cp311-macosx_15_0_x86_64.whl", hash = "sha256:40e069c1f186bcee7e7a74d563ce0288694086c7d279881bc11db0bceb33698b", size = 3023451, upload-time = "2026-04-07T01:32:56.299Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/37/65335f699fe29af0d5f43ad5abeb8252dc63f495f183b033bea1ab71ce92/ompl-2.0.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:071ff969be668b29cb865c5269c3eebee6f9da5bc47334513e64087615c52a95", size = 4359922, upload-time = "2026-04-07T01:32:57.948Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/a0/4d54d3f802e47b69875178bce5e66f3dedcdf1da25709de7d8abd24fafa4/ompl-2.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:50ef03eac9438a46d9b3acb79e1d70abb69d9a6f692a2339d810f3f3862b18a9", size = 4533018, upload-time = "2026-04-07T01:32:59.494Z" },
+    { url = "https://files.pythonhosted.org/packages/59/9b/34b978e0261458059924c41228bd2cee82dee696d5559d5de00dc6a949fc/ompl-2.0.0-cp312-cp312-macosx_15_0_arm64.whl", hash = "sha256:942b3eb71e1abe15fe5a949066c85fc9218f2d1891e7a3e7d97805723eb562a1", size = 2279012, upload-time = "2026-04-07T01:33:01.007Z" },
+    { url = "https://files.pythonhosted.org/packages/42/5b/3505e3629e0ba7688eb2151dd2195af0c30d73c8ebe0b5759795c3d2ddef/ompl-2.0.0-cp312-cp312-macosx_15_0_x86_64.whl", hash = "sha256:aea718b378e1e15e4c9be82fbce3dfa47a106eb39de945ba9c727913b27189d0", size = 3026765, upload-time = "2026-04-07T01:33:02.409Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/a7/e8ce31dc80a8b4d49bcd8c435c2a7d33330945c30909ddbff6fa7b64c7b5/ompl-2.0.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e83c16b0f6aa4fea352279edc2de4b930374c0a4d1a71bad1124cd0580a4b6ed", size = 4359434, upload-time = "2026-04-07T01:33:03.992Z" },
+    { url = "https://files.pythonhosted.org/packages/15/ba/013871b70529f4c720306df48c70c2bb1f34480711a1956c9b20282d6343/ompl-2.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8f2e2e9487e8f4e7e8bd86a0d9b60cd0a781dddee11d7883bde1bb003e1dda06", size = 4533405, upload-time = "2026-04-07T01:33:05.793Z" },
+    { url = "https://files.pythonhosted.org/packages/69/a9/0e60f0405b4b1395b947fa21bcd3458814317975fda4b3293581e5f4e5e0/ompl-2.0.0-cp313-cp313-macosx_15_0_arm64.whl", hash = "sha256:ea0a705a674b7f18f0848bd84f9da496a545616397815ca4f991bf25beef90bf", size = 2278914, upload-time = "2026-04-07T01:33:07.319Z" },
+    { url = "https://files.pythonhosted.org/packages/11/d9/42e7d8d458729e7ecfa4eea476c13333c75804f5b41b4900b5cc2297b148/ompl-2.0.0-cp313-cp313-macosx_15_0_x86_64.whl", hash = "sha256:99a7e68790bdf589dbf4431a62996c0f40295e242a682e8cb169acb16fc4e647", size = 3026722, upload-time = "2026-04-07T01:33:08.667Z" },
+    { url = "https://files.pythonhosted.org/packages/69/0c/1e3cc86d1c13c40c748fccc58b3b323b134de1bac1b792c67380c52ec67d/ompl-2.0.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:db978d8aa6223253bb98b37e994cc7fbc8153954fea7340f253894d17b043946", size = 4359332, upload-time = "2026-04-07T01:33:10.081Z" },
+    { url = "https://files.pythonhosted.org/packages/96/9e/555580cf478880124160d6d0562945974d3aca485791ff4596ecb3b407dc/ompl-2.0.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1b59d2ac36dee0f00a17bcc592fe30425d1c6f56c5f60eee2d989f2287ea05b7", size = 4533303, upload-time = "2026-04-07T01:33:11.462Z" },
 ]
 
 [[package]]

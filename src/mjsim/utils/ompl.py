@@ -6,6 +6,8 @@ import ompl
 import ompl.base as ob
 import ompl.geometric as og
 
+from ompl.base import State
+
 from mjsim.base.robot import Robot
 
 
@@ -336,9 +338,6 @@ def visualize_joint_space_path(
     plt.tight_layout()
     plt.show()
 
-
-from ompl.base._base import State
-from ompl.util._util import vectorDouble
 
 
 def visualize_se3_path(

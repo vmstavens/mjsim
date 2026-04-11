@@ -36,7 +36,7 @@ def _add_stub_path(stub_root: Path) -> None:
 
 def _target_modules() -> Iterable[str]:
     targets: list[str] = []
-    for pkg in ("mujoco", "mujoco.mjx", "ompl", "open3d"):
+    for pkg in ("mujoco", "mujoco.mjx", "ompl", "ompl.base", "ompl.geometric", "open3d"):
         if util.find_spec(pkg):
             targets.append(pkg)
 
