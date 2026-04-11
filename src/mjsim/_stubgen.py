@@ -78,6 +78,7 @@ def _run_stubgen(
         "--ignore-invalid-identifiers=.*",
         "--ignore-all-errors",
     ]
+    print(cmd)
     try:
         subprocess.run(
             cmd,
