@@ -43,7 +43,7 @@ def _target_modules() -> Iterable[str]:
     if util.find_spec("mink"):
         targets.append("mink")
 
-    targets = ["mujoco", "mujoco.mjx", "ompl", "open3d", "mink"]
+    # targets = ["mujoco", "mujoco.mjx", "ompl", "open3d", "mink"]
 
     return targets
 
@@ -80,7 +80,6 @@ def _run_stubgen(
         "--ignore-invalid-identifiers=.*",
         "--ignore-all-errors",
     ]
-    print(cmd)
     try:
         subprocess.run(
             cmd,
@@ -139,13 +138,12 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = ArgumentParser(
         prog="mjsim-stubgen",
-        description="Generate pybind11 stubs for MuJoCo into ./typings.",
+        description="Generate pybind11 stubs for mjsim dependencies into ./typings.",
     )
     parser.add_argument(
         "modules",
         nargs="*",
-        default=["mujoco"],
-        help="Modules to generate stubs for. Defaults to mujoco.",
+        help="Modules to generate stubs for. Defaults to all importable mjsim binary dependencies.",
     )
     parser.add_argument(
         "-o",
@@ -157,9 +155,10 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     stub_root = args.output if args.output.is_absolute() else Path.cwd() / args.output
-    targets = _available_modules(args.modules)
-    missing = sorted(set(args.modules) - set(targets))
-    if missing:
+    requested = args.modules or list(_target_modules())
+    targets = _available_modules(requested)
+    missing = sorted(set(requested) - set(targets))
+    if args.modules and missing:
         print(
             "Skipping modules that are not importable: " + ", ".join(missing),
             file=sys.stderr,
