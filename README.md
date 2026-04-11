@@ -55,18 +55,20 @@ pytest
 ```
 
 ### IDE stubs
-Generate `typings/` stubs on demand in the project root (or the install's
-`site-packages` root when the project root is unknown) using
-`pybind11-stubgen` for `mujoco`, `mujoco.mjx`, `ompl`, `open3d` (and `mink`
-if present):
+Generate `typings/` stubs on demand from the root of the project where you use
+`mjsim`:
 ```bash
-python -m mjsim._stubgen
+mjsim-stubgen
 ```
 
-To run a custom command instead:
+When using `uv`, run the command through the project environment:
 ```bash
-pybind11-stubgen mujoco mujoco.mjx ompl open3d mink -o $(python - <<'PY'
-from mjsim._stubgen import _stub_root
-print(_stub_root())
-PY)
+uv run mjsim-stubgen
+```
+
+By default, the command generates stubs for the importable binary dependencies
+used by `mjsim`: `mujoco`, `mujoco.mjx`, `ompl`, `open3d`, and `mink`. To target
+specific modules or a different output directory:
+```bash
+mjsim-stubgen mujoco mujoco.mjx -o typings
 ```

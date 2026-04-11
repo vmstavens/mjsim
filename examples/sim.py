@@ -26,7 +26,7 @@ class Sim:
 
         s_attachment_site = arm.site("arm/attachment_site")
 
-        s_attachment_site.attach_body(gripper.worldbody.first_body(), prefix="gripper")
+        s_attachment_site.attach_body(gripper.worldbody.first_body(), prefix="gripper/")
 
         m = scene.compile()
         d = mj.MjData(m)
@@ -37,9 +37,6 @@ class Sim:
         pass
 
     def run(self) -> None:
-
-        print(self.gripper.info)
-        quit()
 
         with mujoco.viewer.launch_passive(
             self.m, self.d, key_callback=self.cb

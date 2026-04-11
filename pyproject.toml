@@ -43,10 +43,3 @@ Repository = "https://github.com/vmstavens/mjsim"
 
 [project.scripts]
 mjsim-stubgen = "mjsim._stubgen:main"
-
-# [tool.uv.build]
-# package-dir = { "" = "src" }
-# packages = ["mjsim"]
-
-# [tool.uv.build.package-data]
-# mjsim = ["assets/*.xml"]
