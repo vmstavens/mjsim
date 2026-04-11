@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 import logging
 import os
 import queue
 import time
 import warnings
 from abc import ABC, abstractmethod
+from importlib import import_module
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Callable, List
 
 import mujoco as mj
-import mujoco.viewer
 
 logging.basicConfig(level=logging.INFO)  # This adds a default handler
 relative_path = os.path.relpath(__file__)  # Relative to current working directory
@@ -230,7 +232,9 @@ class BaseSim(ABC):
         # in order to enable camera rendering in main thread, queue the key events
         key_queue = queue.Queue()
 
-        with mujoco.viewer.launch_passive(
+        mj_viewer = import_module("mujoco.viewer")
+
+        with mj_viewer.launch_passive(
             model=self.model,
             data=self.data,
             key_callback=lambda key: key_queue.put(key),

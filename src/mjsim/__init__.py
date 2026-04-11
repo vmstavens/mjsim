@@ -12,7 +12,7 @@ import os
 import sys
 from importlib import import_module, util
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mjsim._stubgen import add_existing_stubs_to_path, ensure_stubs
 
@@ -158,29 +158,34 @@ _EXPORT_MODULES = {
 }
 
 
-def _requires_missing_dependency(name: str) -> bool:
+def _missing_dependency(name: str) -> str | None:
     if name in _BASE_EXPORTS + _SENSOR_EXPORTS + _MJ_HELPER_EXPORTS + _MJCF_EXPORTS:
-        return util.find_spec("mujoco") is None
+        return "mujoco" if util.find_spec("mujoco") is None else None
     if name in _PLANNER_EXPORTS:
-        return util.find_spec("ompl") is None
-    return False
+        return "ompl" if util.find_spec("ompl") is None else None
+    return None
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     """Lazily resolve public exports while keeping ``import mjsim`` lightweight."""
 
     if name not in _EXPORT_MODULES:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-    if _LIGHT_IMPORT or _requires_missing_dependency(name):
+    if _LIGHT_IMPORT:
         globals()[name] = None
         return None
 
-    try:
-        module = import_module(_EXPORT_MODULES[name])
-        value = module if name == "ctrl" else getattr(module, name)
-    except Exception:  # pragma: no cover - optional import for doc builds or missing libs
-        value = None
+    missing_dependency = _missing_dependency(name)
+    if missing_dependency is not None:
+        msg = (
+            f"Cannot import mjsim.{name}: optional dependency "
+            f"{missing_dependency!r} is not installed."
+        )
+        raise ImportError(msg)
+
+    module = import_module(_EXPORT_MODULES[name])
+    value = module if name == "ctrl" else getattr(module, name)
 
     globals()[name] = value
     return value
