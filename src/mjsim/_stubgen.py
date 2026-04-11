@@ -43,6 +43,8 @@ def _target_modules() -> Iterable[str]:
     if util.find_spec("mink"):
         targets.append("mink")
 
+    targets = ["mujoco", "mujoco.mjx", "ompl", "open3d", "mink"]
+
     return targets
 
 
