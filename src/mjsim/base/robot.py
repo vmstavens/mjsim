@@ -6,7 +6,6 @@ import mujoco as mj
 import numpy as np
 import spatialmath as sm
 
-from mjsim.utils.jax import sm_to_smx, smx_to_sm
 from mjsim.utils.mj import (
     ObjType,
     RobotInfo,
