@@ -19,7 +19,7 @@ from mjsim._stubgen import add_existing_stubs_to_path, ensure_stubs
 if TYPE_CHECKING:
     # Static-only imports so editors can resolve signatures and docstrings.
     from mjsim.base.robot import Robot  # noqa: F401
-    from mjsim.base.sim import BaseSim, SimSync, sleep  # noqa: F401
+    from mjsim.base.sim import BaseSim, SimSync, sleep, thread  # noqa: F401
     from mjsim.ctrl import (  # noqa: F401
         DMPCartesian,
         DMPPosition,
@@ -84,7 +84,7 @@ if TYPE_CHECKING:
 _RUNNING_STUBGEN_CLI = Path(sys.argv[0]).stem == "mjsim-stubgen"
 _LIGHT_IMPORT = os.environ.get("MJSIM_LIGHT_IMPORT") == "1" or _RUNNING_STUBGEN_CLI
 
-_BASE_EXPORTS = ["BaseSim", "SimSync", "Robot", "sleep"]
+_BASE_EXPORTS = ["BaseSim", "SimSync", "Robot", "sleep", "thread"]
 _CTRL_EXPORTS = ["DMPCartesian", "DMPPosition", "DMPQuaternion", "OpSpace", "ctrl"]
 _SENSOR_EXPORTS = ["Camera"]
 _MJ_HELPER_EXPORTS = [
@@ -151,6 +151,7 @@ _EXPORT_MODULES = {
     "BaseSim": "mjsim.base.sim",
     "SimSync": "mjsim.base.sim",
     "sleep": "mjsim.base.sim",
+    "thread": "mjsim.base.sim",
     "Camera": "mjsim.sensors",
     **{name: "mjsim.utils.mj" for name in _MJ_HELPER_EXPORTS},
     **{name: "mjsim.utils.mjs" for name in _MJCF_EXPORTS},

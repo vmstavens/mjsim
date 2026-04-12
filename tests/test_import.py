@@ -18,6 +18,7 @@ def test_root_exports_public_convenience_api() -> None:
 
     expected_exports = {
         "BaseSim",
+        "thread",
         "Robot",
         "Camera",
         "DMPCartesian",
@@ -76,3 +77,35 @@ def test_basesim_subclass_uses_model_and_data_properties() -> None:
 
     assert sim.model is sim._model
     assert sim.data is sim._data
+
+
+def test_basesim_discovers_thread_decorated_methods_without_init() -> None:
+    pytest.importorskip("mujoco")
+
+    import mjsim
+
+    class DecoratedSim(mjsim.BaseSim):
+        def __init__(self) -> None:
+            self._model = object()
+            self._data = object()
+
+        @property
+        def model(self):
+            return self._model
+
+        @property
+        def data(self):
+            return self._data
+
+        @mjsim.thread
+        def thread1(self, ss):
+            return None
+
+        def helper(self, ss):
+            return None
+
+    sim = DecoratedSim()
+
+    assert [callback.__name__ for callback in sim._thread_callbacks()] == ["thread1"]
+    with pytest.warns(UserWarning, match="control_loop"):
+        sim.control_loop()

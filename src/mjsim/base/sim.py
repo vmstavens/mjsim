@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from importlib import import_module
 from pathlib import Path
 from threading import Lock, Thread
-from typing import Callable, List
+from typing import Callable, List, TypeVar, cast
 
 import mujoco as mj
 
@@ -17,6 +17,9 @@ logging.basicConfig(level=logging.INFO)  # This adds a default handler
 relative_path = os.path.relpath(__file__)  # Relative to current working directory
 logger = logging.getLogger(relative_path)
 logger.setLevel(logging.DEBUG)
+
+_THREAD_MARKER_ATTR = "_mjsim_thread_callback"
+F = TypeVar("F", bound=Callable[..., object])
 
 
 class SimSync:
@@ -36,6 +39,15 @@ def sleep(duration, sim_sync: SimSync, model: mj.MjModel):
     n_steps = int(round(duration / model.opt.timestep))
     for _ in range(n_steps):
         sim_sync.step()
+
+
+ThreadCallback = Callable[[SimSync], None]
+
+
+def thread(callback: F) -> F:
+    """Mark a ``BaseSim`` method as a simulation thread callback."""
+    setattr(callback, _THREAD_MARKER_ATTR, True)
+    return callback
 
 
 class BaseSim(ABC):
@@ -58,8 +70,26 @@ class BaseSim(ABC):
     def __init__(self) -> None:
         self._control_loop_warning_issued = False
         self._keyboard_callback_warning_issued = False
-        self.threads: List[Callable] = []
+        self.threads: List[ThreadCallback] = []
         self._scene = None
+
+    def _thread_callbacks(self) -> list[ThreadCallback]:
+        callbacks: dict[str, ThreadCallback] = {}
+
+        for cls in reversed(type(self).mro()):
+            for name, value in cls.__dict__.items():
+                if getattr(value, _THREAD_MARKER_ATTR, False):
+                    callbacks[name] = cast(ThreadCallback, getattr(self, name))
+                elif name in callbacks:
+                    callbacks.pop(name)
+
+        callbacks.update(
+            {
+                f"threads[{idx}]": callback
+                for idx, callback in enumerate(getattr(self, "threads", ()))
+            }
+        )
+        return list(callbacks.values())
 
     @property
     @abstractmethod
@@ -99,7 +129,7 @@ class BaseSim(ABC):
 
     @property
     def scene(self) -> mj.MjvScene:
-        assert self._scene is not None, (
+        assert getattr(self, "_scene", None) is not None, (
             "scene attribute is None, likely due to no scene being defined in viewer loop. "
             "Ensure this attribute is not accessed before viewer."
         )
@@ -121,7 +151,7 @@ class BaseSim(ABC):
         UserWarning
             If the method is not implemented in the child class.
         """
-        if not self._control_loop_warning_issued:
+        if not getattr(self, "_control_loop_warning_issued", False):
             warnings.warn(
                 "Method 'control_loop' is not implemented in the sim child class.",
                 UserWarning,
@@ -150,7 +180,7 @@ class BaseSim(ABC):
         UserWarning
             If the method is not implemented in the child class.
         """
-        if not self._keyboard_callback_warning_issued:
+        if not getattr(self, "_keyboard_callback_warning_issued", False):
             warnings.warn(
                 "Method 'keyboard_callback' is not implemented in the sim child class.",
                 UserWarning,
@@ -186,14 +216,15 @@ class BaseSim(ABC):
         """
 
         # create SimSync objects for each task
-        sim_syncs = [SimSync() for _ in range(len(self.threads))]
+        thread_callbacks = self._thread_callbacks()
+        sim_syncs = [SimSync() for _ in range(len(thread_callbacks))]
 
         threads = [
             Thread(
                 target=tgt,
                 args=(ss,),
             )
-            for tgt, ss in zip(self.threads, sim_syncs)
+            for tgt, ss in zip(thread_callbacks, sim_syncs)
         ]
 
         for i, t in enumerate(threads):

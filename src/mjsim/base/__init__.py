@@ -5,7 +5,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import TYPE_CHECKING
 
-from mjsim.base.sim import BaseSim, SimSync, sleep
+from mjsim.base.sim import BaseSim, SimSync, sleep, thread
 
 if TYPE_CHECKING:
     from mjsim.base.robot import Robot
@@ -19,4 +19,4 @@ def __getattr__(name: str):
     globals()[name] = value
     return value
 
-__all__ = ["BaseSim", "SimSync", "Robot", "sleep"]
+__all__ = ["BaseSim", "SimSync", "Robot", "sleep", "thread"]
