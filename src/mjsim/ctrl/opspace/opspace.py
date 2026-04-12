@@ -1,3 +1,5 @@
+from typing import Optional
+
 import mujoco as mj
 import numpy as np
 import spatialmath as sm
@@ -52,7 +54,7 @@ class OpSpace:
         self.error_quat = np.zeros(4)
 
         self.robot = robot
-        self.T_target: sm.SE3 = robot.fk(self.robot.q)
+        self.T_target: Optional[sm.SE3] = None
         self.q0 = self.robot.q
 
         # self.site_quat = smb.r2q(self.T_target.R)
