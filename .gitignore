@@ -1,5 +1,6 @@
 # custom
-
+.vscode
+.codex
 typings/
 tmp/
 MUJOCO_LOG.TXT
