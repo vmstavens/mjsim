@@ -772,37 +772,9 @@ def deform_3d_custom(
         bend=bend,
         shear=shear,
         segment_size=kwargs.pop("segment_size", size / max(count)),
-        segment_geom_type=kwargs.pop(
-            "segment_geom_type", mj.mjtGeom.mjGEOM_BOX
-        ),
+        segment_geom_type=kwargs.pop("segment_geom_type", mj.mjtGeom.mjGEOM_BOX),
         **kwargs,
     )
-
-
-# def replicate() -> mj.MjSpec:
-#     """
-#     https://github.com/google-deepmind/mujoco/tree/main/model/replicate
-#     """
-#     pass
-
-
-def weld(
-    scene: mj.MjSpec,
-    obj1: Union[mj.MjsSite, mj.MjsBody],
-    obj2: Union[mj.MjsSite, mj.MjsBody],
-    solref: Optional[list] = None,
-) -> mj.MjSpec:
-    solref = solref if solref is not None else [0.0000001, 1]
-    scene.add_equality(
-        name="weld_left_hand",
-        type=mj.mjtEq.mjEQ_WELD,
-        objtype=mj.mjtObj.mjOBJ_BODY,
-        name1=obj1.name,
-        name2=obj2.name,
-        data=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
-        solref=solref,
-    )
-    return scene
 
 
 def replicate(
@@ -973,24 +945,4 @@ def pipe(
     )
 
 
-# Alternative pipe implementation using the original XML approach for compatibility
-def pipe_legacy(length: float = 0.1, **kwargs) -> mj.MjSpec:
-    """
-    Legacy pipe implementation using the original XML string approach.
-
-    This maintains compatibility with existing code that expects the exact
-    XML structure from the original pipe function.
-    """
-    count = kwargs.pop("count", 30)
-    _XML = f"""
-    <mujoco>
-        <worldbody>
-            <body euler="0 0 0" pos="0 0 0">
-                <replicate sep="hole:" count="{count}" euler="0 0 20">
-                    <geom type="box" solref="0.000000001 1" pos="0 -0.018 0" size=".004 .001 {length / 2}" friction="0.2 0.2 0.2" />
-                </replicate>
-            </body>
-        </worldbody>
-    </mujoco>
-    """
-    return _spec_from_string(_XML)
+# def mesh()

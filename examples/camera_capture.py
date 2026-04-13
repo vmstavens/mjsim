@@ -45,7 +45,9 @@ def _build_model() -> tuple[mj.MjModel, mj.MjData]:
 
 def main() -> None:
     model, data = _build_model()
-    cam = Camera(model, data, cam_name="front", width=320, height=240, save_dir="tmp/cam/")
+    cam = Camera(
+        model, data, cam_name="front", width=320, height=240, save_dir="tmp/cam/"
+    )
 
     # Step once to ensure the scene is initialized.
     mj.mj_forward(model, data)
