@@ -1,4 +1,11 @@
+import os
+
 import pytest
+
+if os.environ.get("MJSIM_LIGHT_IMPORT") == "1":
+    pytest.skip(
+        "Skipping MuJoCo-dependent tests in light mode", allow_module_level=True
+    )
 
 
 def test_cable_xml_roundtrip():
@@ -27,8 +34,44 @@ def test_cable_xml_roundtrip():
             pytest.skip("MuJoCo build lacks flex composite support")
         raise
     assert "composite" in block.to_xml_string()
-import os
-import pytest
 
-if os.environ.get("MJSIM_LIGHT_IMPORT") == "1":
-    pytest.skip("Skipping MuJoCo-dependent tests in light mode", allow_module_level=True)
+
+def test_mesh_helper_writes_collision_cache_and_compiles(tmp_path):
+    pytest.importorskip("mujoco")
+    pytest.importorskip("open3d")
+
+    from mjsim.utils.mjs import mesh
+
+    mesh_path = tmp_path / "tetra.obj"
+    mesh_path.write_text(
+        "\n".join(
+            [
+                "v 0 0 0",
+                "v 1 0 0",
+                "v 0 1 0",
+                "v 0 0 1",
+                "f 1 3 2",
+                "f 1 2 4",
+                "f 2 3 4",
+                "f 3 1 4",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    spec = mesh(
+        mesh_path,
+        model_name="tetra_model",
+        name="tetra",
+        decimation_ratio=1.0,
+        cache_dir=tmp_path / ".cache",
+        freejoint=True,
+    )
+
+    cached_meshes = list((tmp_path / ".cache").glob("tetra_collision_*.obj"))
+    assert len(cached_meshes) == 1
+
+    model = spec.compile()
+    assert model.nmesh == 2
+    assert model.ngeom == 2
+    assert model.njnt == 1

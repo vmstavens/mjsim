@@ -35,8 +35,6 @@ class Sim(ms.BaseSim):
 
         ur = mj.MjSpec.from_file(ur10e_mj_description.MJCF_PATH)
 
-        ms.cable()
-
         gripper = mj.MjSpec.from_file(robotiq_2f85_mj_description.MJCF_PATH)
 
         s_attachment = ur.site("attachment_site")
@@ -63,7 +61,7 @@ class Sim(ms.BaseSim):
 
     def keyboard_callback(self, key):
         if key is glfw.KEY_SPACE:
-            print("Placing ball at [0, 0, 1]...:")
+            print("Placing ball at [0, 0, 1]...")
             ms.set_pose(self.model, self.data, "ball", ms.ObjType.BODY, sm.SE3.Tz(1))
         if key is glfw.KEY_PERIOD:
             print("Printing gripper information:")

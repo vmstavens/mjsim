@@ -1,5 +1,8 @@
+import hashlib
+import re
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional, Union
+from pathlib import Path
+from typing import List, Literal, Optional, Sequence, Union
 from xml.dom import minidom
 
 import mujoco as mj
@@ -83,6 +86,364 @@ def empty_scene(sim_name: str = "mj_sim", multiccd: bool = False) -> mj.MjSpec:
     </mujoco>
     """
     return _spec_from_string(_XML)
+
+
+def _safe_mj_name(name: str) -> str:
+    safe = re.sub(r"[^0-9A-Za-z_:/.-]+", "_", name).strip("_")
+    return safe or "mesh"
+
+
+def _vector(value: Sequence[float] | float, length: int, name: str) -> list[float]:
+    if isinstance(value, (int, float)):
+        return [float(value)] * length
+    if isinstance(value, str):
+        msg = f"{name} must be a number or a sequence of {length} numbers"
+        raise TypeError(msg)
+
+    values = [float(x) for x in value]
+    if len(values) != length:
+        msg = f"{name} must contain {length} values, got {len(values)}"
+        raise ValueError(msg)
+    return values
+
+
+def _optional_vector(
+    value: Sequence[float] | None,
+    length: int,
+    name: str,
+) -> list[float] | None:
+    if value is None:
+        return None
+    return _vector(value, length, name)
+
+
+def _geom_type(value: mj.mjtGeom | int | str, name: str) -> mj.mjtGeom | int:
+    if not isinstance(value, str):
+        return value
+
+    key = value.strip().upper()
+    if not key.startswith("MJGEOM_"):
+        key = f"MJGEOM_{key}"
+    key = key.replace("MJGEOM_", "mjGEOM_", 1)
+
+    if not hasattr(mj.mjtGeom, key):
+        msg = f"{name} must be a mujoco.mjtGeom value or valid geom type string"
+        raise ValueError(msg)
+    return getattr(mj.mjtGeom, key)
+
+
+def _load_triangle_mesh(path: Path):
+    import open3d as o3d
+
+    loaded_mesh = o3d.io.read_triangle_mesh(str(path), enable_post_processing=True)
+    if not loaded_mesh.has_vertices():
+        msg = f"Mesh file {path} has no vertices"
+        raise ValueError(msg)
+    if not loaded_mesh.has_triangles():
+        msg = f"Mesh file {path} has no triangles"
+        raise ValueError(msg)
+    return loaded_mesh
+
+
+def _clean_triangle_mesh(triangle_mesh):
+    triangle_mesh.remove_duplicated_vertices()
+    triangle_mesh.remove_duplicated_triangles()
+    triangle_mesh.remove_degenerate_triangles()
+    triangle_mesh.remove_unreferenced_vertices()
+    triangle_mesh.compute_vertex_normals()
+    return triangle_mesh
+
+
+def _decimate_triangle_mesh(
+    triangle_mesh,
+    decimation_ratio: float,
+    decimation_method: Literal["quadric", "clustering", "none"],
+    preserve_volume: bool,
+    max_error: float | None,
+    voxel_size: float | None,
+):
+    import numpy as np
+    import open3d as o3d
+
+    mesh_copy = o3d.geometry.TriangleMesh(triangle_mesh)
+    if decimation_method == "none" or decimation_ratio >= 1.0:
+        return _clean_triangle_mesh(mesh_copy)
+
+    current_triangles = len(mesh_copy.triangles)
+    target_triangles = max(4, int(current_triangles * decimation_ratio))
+
+    if decimation_method == "quadric":
+        decimated_mesh = mesh_copy.simplify_quadric_decimation(
+            target_number_of_triangles=target_triangles,
+            maximum_error=np.inf if max_error is None else max_error,
+            boundary_weight=1.0 if preserve_volume else 0.0,
+        )
+    elif decimation_method == "clustering":
+        if voxel_size is None:
+            diagonal = float(
+                np.linalg.norm(mesh_copy.get_max_bound() - mesh_copy.get_min_bound())
+            )
+            voxel_size = max(diagonal, 1.0) * 0.01 * np.sqrt(1.0 / decimation_ratio)
+        decimated_mesh = mesh_copy.simplify_vertex_clustering(voxel_size=voxel_size)
+    else:
+        msg = "decimation_method must be 'quadric', 'clustering', or 'none'"
+        raise ValueError(msg)
+
+    return _clean_triangle_mesh(decimated_mesh)
+
+
+def _mesh_arrays(triangle_mesh) -> tuple[list[float], list[int]]:
+    import numpy as np
+
+    vertices = np.asarray(triangle_mesh.vertices, dtype=np.float64).reshape(-1)
+    triangles = np.asarray(triangle_mesh.triangles, dtype=np.int32).reshape(-1)
+    return vertices.tolist(), triangles.tolist()
+
+
+def _collision_cache_path(
+    source_path: Path,
+    cache_dir: Path,
+    decimation_ratio: float,
+    decimation_method: str,
+    preserve_volume: bool,
+    max_error: float | None,
+    voxel_size: float | None,
+) -> Path:
+    stat = source_path.stat()
+    cache_key = "|".join(
+        [
+            "mjsim-mesh-v1",
+            str(source_path.resolve()),
+            str(stat.st_size),
+            str(stat.st_mtime_ns),
+            str(decimation_ratio),
+            decimation_method,
+            str(preserve_volume),
+            str(max_error),
+            str(voxel_size),
+        ]
+    )
+    digest = hashlib.sha256(cache_key.encode()).hexdigest()[:16]
+    return cache_dir / f"{_safe_mj_name(source_path.stem)}_collision_{digest}.obj"
+
+
+def mesh(
+    path: str | Path,
+    model_name: str | None = None,
+    name: str | None = None,
+    scale: Sequence[float] | float = 1.0,
+    pos: Sequence[float] | None = None,
+    euler: Sequence[float] | None = None,
+    quat: Sequence[float] | None = None,
+    geom_pos: Sequence[float] | None = None,
+    geom_euler: Sequence[float] | None = None,
+    geom_quat: Sequence[float] | None = None,
+    freejoint: bool = False,
+    decimation_ratio: float = 0.05,
+    decimation_method: Literal["quadric", "clustering", "none"] = "quadric",
+    preserve_volume: bool = True,
+    max_error: float | None = None,
+    voxel_size: float | None = None,
+    cache_dir: str | Path = ".cache",
+    use_cache: bool = True,
+    overwrite_cache: bool = False,
+    visual: bool = True,
+    collision: bool = True,
+    visual_rgba: Sequence[float] = (0.9, 0.9, 0.95, 1.0),
+    collision_rgba: Sequence[float] = (0.9, 0.0, 0.0, 0.3),
+    collision_geom_type: mj.mjtGeom | int | str = mj.mjtGeom.mjGEOM_MESH,
+    density: float = 1.0,
+    friction: Sequence[float] = (0.1, 0.005, 0.0001),
+    solref: Sequence[float] = (0.02, 1.0),
+    solimp: Sequence[float] = (0.9, 0.95, 0.001, 0.5, 2.0),
+    contype: int = 1,
+    conaffinity: int = 1,
+    visual_group: int = 2,
+    collision_group: int = 3,
+) -> mj.MjSpec:
+    """
+    Create an attachable MuJoCo mesh spec with separate visual and collision geoms.
+
+    The source mesh is used for the visual geom. A simplified collision mesh is
+    generated with Open3D and written to ``cache_dir`` so later runs can reuse it.
+
+    Args:
+        path: Mesh file to load. Any format supported by Open3D can be used.
+        model_name: MuJoCo model name. Defaults to the sanitized file stem.
+        name: Body and geom name stem. Defaults to ``model_name``.
+        scale: Scalar or XYZ scale passed to both MuJoCo mesh assets.
+        pos: Optional body position.
+        euler: Optional body Euler rotation.
+        quat: Optional body quaternion rotation.
+        geom_pos: Optional local position for both visual and collision geoms.
+        geom_euler: Optional local Euler rotation for both geoms.
+        geom_quat: Optional local quaternion rotation for both geoms.
+        freejoint: Add a free joint to the mesh body.
+        decimation_ratio: Fraction of triangles to keep in the collision mesh.
+        decimation_method: ``"quadric"``, ``"clustering"``, or ``"none"``.
+        preserve_volume: Uses Open3D's boundary weight for quadric decimation.
+        max_error: Optional quadric decimation error bound.
+        voxel_size: Optional clustering voxel size.
+        cache_dir: Directory for decimated collision OBJ files.
+        use_cache: Reuse an existing collision cache file when available.
+        overwrite_cache: Regenerate the collision cache even when it exists.
+        visual: Add the high-resolution visual geom.
+        collision: Add the simplified collision geom.
+        visual_rgba: RGBA for the visual geom.
+        collision_rgba: RGBA for the collision geom.
+        collision_geom_type: MuJoCo geom type for collisions, e.g. ``"mesh"`` or
+            ``"sdf"``.
+        density: Density for the collision geom.
+        friction: Collision geom friction.
+        solref: Collision geom solver reference.
+        solimp: Collision geom solver impedance.
+        contype: Collision type bitmask.
+        conaffinity: Collision affinity bitmask.
+        visual_group: MuJoCo visualization group for the visual geom.
+        collision_group: MuJoCo visualization group for the collision geom.
+
+    Returns:
+        An ``MjSpec`` containing a single body with mesh assets and geoms.
+    """
+    source_path = Path(path).expanduser()
+    if not source_path.is_file():
+        msg = f"Mesh file does not exist: {source_path}"
+        raise FileNotFoundError(msg)
+    if not 0.0 < decimation_ratio <= 1.0:
+        msg = f"decimation_ratio must be in the interval (0, 1], got {decimation_ratio}"
+        raise ValueError(msg)
+    if euler is not None and quat is not None:
+        msg = "Pass either euler or quat for the body rotation, not both"
+        raise ValueError(msg)
+    if geom_euler is not None and geom_quat is not None:
+        msg = "Pass either geom_euler or geom_quat for the geom rotation, not both"
+        raise ValueError(msg)
+    if not visual and not collision:
+        msg = "At least one of visual or collision must be enabled"
+        raise ValueError(msg)
+
+    mesh_name = _safe_mj_name(name or model_name or source_path.stem)
+    spec = mj.MjSpec()
+    spec.modelname = _safe_mj_name(model_name or mesh_name)
+
+    visual_mesh = _clean_triangle_mesh(_load_triangle_mesh(source_path))
+
+    cache_path = _collision_cache_path(
+        source_path=source_path,
+        cache_dir=Path(cache_dir).expanduser(),
+        decimation_ratio=decimation_ratio,
+        decimation_method=decimation_method,
+        preserve_volume=preserve_volume,
+        max_error=max_error,
+        voxel_size=voxel_size,
+    )
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if use_cache and cache_path.exists() and not overwrite_cache:
+        collision_mesh = _load_triangle_mesh(cache_path)
+    else:
+        collision_mesh = _decimate_triangle_mesh(
+            triangle_mesh=visual_mesh,
+            decimation_ratio=decimation_ratio,
+            decimation_method=decimation_method,
+            preserve_volume=preserve_volume,
+            max_error=max_error,
+            voxel_size=voxel_size,
+        )
+
+        import open3d as o3d
+
+        if not o3d.io.write_triangle_mesh(
+            str(cache_path),
+            collision_mesh,
+            write_ascii=True,
+            write_vertex_normals=False,
+        ):
+            msg = f"Failed to write collision mesh cache: {cache_path}"
+            raise OSError(msg)
+
+    scale_xyz = _vector(scale, 3, "scale")
+    body_kwargs = {"name": mesh_name}
+    body_pos = _optional_vector(pos, 3, "pos")
+    body_euler = _optional_vector(euler, 3, "euler")
+    body_quat = _optional_vector(quat, 4, "quat")
+    if body_pos is not None:
+        body_kwargs["pos"] = body_pos
+    if body_euler is not None:
+        body_kwargs["euler"] = body_euler
+    if body_quat is not None:
+        body_kwargs["quat"] = body_quat
+
+    body = spec.worldbody.add_body(**body_kwargs)
+    if freejoint:
+        body.add_freejoint()
+
+    geom_kwargs = {}
+    local_pos = _optional_vector(geom_pos, 3, "geom_pos")
+    local_euler = _optional_vector(geom_euler, 3, "geom_euler")
+    local_quat = _optional_vector(geom_quat, 4, "geom_quat")
+    if local_pos is not None:
+        geom_kwargs["pos"] = local_pos
+    if local_euler is not None:
+        geom_kwargs["euler"] = local_euler
+    if local_quat is not None:
+        geom_kwargs["quat"] = local_quat
+
+    if visual:
+        visual_vertices, visual_triangles = _mesh_arrays(visual_mesh)
+        visual_asset_name = f"{mesh_name}_visual_mesh"
+        spec.add_mesh(
+            name=visual_asset_name,
+            uservert=visual_vertices,
+            userface=visual_triangles,
+            scale=scale_xyz,
+        )
+        body.add_geom(
+            name=f"{mesh_name}_visual",
+            type=mj.mjtGeom.mjGEOM_MESH,
+            meshname=visual_asset_name,
+            rgba=_vector(visual_rgba, 4, "visual_rgba"),
+            density=0.0,
+            contype=0,
+            conaffinity=0,
+            group=visual_group,
+            **geom_kwargs,
+        )
+
+    if collision:
+        collision_vertices, collision_triangles = _mesh_arrays(collision_mesh)
+        collision_asset_name = f"{mesh_name}_collision_mesh"
+        spec.add_mesh(
+            name=collision_asset_name,
+            uservert=collision_vertices,
+            userface=collision_triangles,
+            scale=scale_xyz,
+        )
+        body.add_geom(
+            name=f"{mesh_name}_collision",
+            type=_geom_type(collision_geom_type, "collision_geom_type"),
+            meshname=collision_asset_name,
+            rgba=_vector(collision_rgba, 4, "collision_rgba"),
+            density=density,
+            friction=_vector(friction, 3, "friction"),
+            solref=_vector(solref, 2, "solref"),
+            solimp=_vector(solimp, 5, "solimp"),
+            contype=contype,
+            conaffinity=conaffinity,
+            group=collision_group,
+            **geom_kwargs,
+        )
+
+    try:
+        setattr(
+            spec,
+            "_mesh_cache_path",
+            str(cache_path),
+        )
+    except Exception:
+        pass
+
+    return spec
 
 
 def dlo(
@@ -493,7 +854,7 @@ def dqo(
     mujoco = ET.Element("mujoco", model=model_name)
 
     # Add extension
-    extension = ET.SubElement(mujoco, "extension")
+    ET.SubElement(mujoco, "extension")
     # ET.SubElement(extension, "plugin", plugin="mujoco.elasticity.grid")
 
     # Add worldbody
@@ -772,9 +1133,7 @@ def deform_3d_custom(
         bend=bend,
         shear=shear,
         segment_size=kwargs.pop("segment_size", size / max(count)),
-        segment_geom_type=kwargs.pop(
-            "segment_geom_type", mj.mjtGeom.mjGEOM_BOX
-        ),
+        segment_geom_type=kwargs.pop("segment_geom_type", mj.mjtGeom.mjGEOM_BOX),
         **kwargs,
     )
 
