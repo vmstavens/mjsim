@@ -6,6 +6,7 @@ import mujoco as mj
 from robot_descriptions import ur10e_mj_description, robotiq_2f85_mj_description
 import spatialmath as sm
 
+
 class Sim(ms.BaseSim):
     def __init__(self):
         self._model, self._data = self._init()
@@ -13,7 +14,9 @@ class Sim(ms.BaseSim):
         self.ur = ms.Robot(self.model, self.data, "ur/")
         self.gripper = ms.Robot(self.model, self.data, "ur/gripper/")
 
-        T = ms.get_pose(self.model, self.data, self.ur.info.site_names[0], ms.ObjType.SITE)
+        _ = ms.get_pose(
+            self.model, self.data, self.ur.info.site_names[0], ms.ObjType.SITE
+        )
 
         self.ctrl = ms.OpSpace(self.ur, gravity_comp=True)
 
@@ -23,42 +26,17 @@ class Sim(ms.BaseSim):
 
         ur = mj.MjSpec.from_file(ur10e_mj_description.MJCF_PATH)
 
-        mesh_path = next(
-            (
-                path
-                for path in (
-                    Path("assets/harting/09110007101_100844154MOD000A.obj"),
-                    Path.home()
-                    / "Downloads/han_harting/09140013101_100198453MOD000C.obj",
-                )
-                if path.exists()
-            ),
-            None,
-        )
-        if mesh_path is not None:
-            obj = ms.mesh(
-                mesh_path,
-                model_name="harting_connector",
-                name="harting_connector",
-                scale=0.001,
-                pos=[0.35, 0, 0.05],
-                decimation_ratio=0.01,
-                collision_geom_type=mj.mjtGeom.mjGEOM_SDF,
-                cache_dir=".cache",
-            )
-            scene.attach(obj, "harting/")
-
         gripper = mj.MjSpec.from_file(robotiq_2f85_mj_description.MJCF_PATH)
 
         s_attachment = ur.site("attachment_site")
 
-        s_attachment.attach_body(gripper.worldbody.first_body(),prefix="gripper/")
+        s_attachment.attach_body(gripper.worldbody.first_body(), prefix="gripper/")
 
         f_ur = scene.worldbody.add_frame()
 
         scene.attach(ur, "ur/", frame=f_ur)
 
-        b_ball = scene.worldbody.add_body(name="ball", pos=[0,0,1])
+        b_ball = scene.worldbody.add_body(name="ball", pos=[0, 0, 1])
         b_ball.add_geom(name="ball", size=[0.01])
         b_ball.add_freejoint()
 
@@ -68,6 +46,7 @@ class Sim(ms.BaseSim):
     @property
     def model(self):
         return self._model
+
     @property
     def data(self):
         return self._data
@@ -80,11 +59,11 @@ class Sim(ms.BaseSim):
             print("Printing gripper information:")
             print(self.gripper.info)
 
-
     @ms.thread
     def see_me_run(self, ss: ms.SimSync):
         while True:
             ss.step()
+
 
 if __name__ == "__main__":
     sim = Sim()

@@ -1,8 +1,7 @@
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
-import ompl
 import ompl.base as ob
 import ompl.geometric as og
 
@@ -11,16 +10,40 @@ from ompl.base import State
 from mjsim.base.robot import Robot
 
 
+def _alloc_state(space: ob.StateSpace):
+    if hasattr(space, "allocState"):
+        return space.allocState()
+    return ob.State(space)
+
+
+def _state_validity_checker(
+    space_information: ob.SpaceInformation,
+    validity_check_fn: Callable[[ob.State], bool],
+):
+    if hasattr(ob, "StateValidityCheckerFn"):
+        return ob.StateValidityCheckerFn(validity_check_fn)
+
+    class _CallableStateValidityChecker(ob.StateValidityChecker):
+        def __init__(self, si: ob.SpaceInformation) -> None:
+            super().__init__(si)
+
+        def isValid(self, state) -> bool:
+            return bool(validity_check_fn(state))
+
+    return _CallableStateValidityChecker(space_information)
+
+
 def get_compound_pose(state):
     """Extract pose from compound state (position + SO3)"""
+    state_value = state() if callable(state) else state
     # Position (first subspace)
-    pos = state()[0]
+    pos = state_value[0]
     x = pos[0]
     y = pos[1]
     z = pos[2]
 
     # Orientation (second subspace - SO3)
-    rot = state()[1]
+    rot = state_value[1]
     # For SO3StateSpace, we can get the quaternion
     qx = rot.x
     qy = rot.y
@@ -32,14 +55,15 @@ def get_compound_pose(state):
 
 def set_compound_state(state, pose: np.ndarray):
     """Set compound state (position + SO3) from pose array"""
+    state_value = state() if callable(state) else state
     # Position (first subspace)
-    pos = state()[0]
+    pos = state_value[0]
     pos[0] = float(pose[0])  # x
     pos[1] = float(pose[1])  # y
     pos[2] = float(pose[2])  # z
 
     # Orientation (second subspace - SO3)
-    rot = state()[1]
+    rot = state_value[1]
     if len(pose) == 7:
         # pose: [x, y, z, qx, qy, qz, qw]
         rot.x = float(pose[3])
@@ -89,22 +113,22 @@ def qplan(
 
     # Create the SimpleSetup object
     ss = og.SimpleSetup(space)
-    ss.setStateValidityChecker(ob.StateValidityCheckerFn(validity_check_fn))
+    si = ss.getSpaceInformation()
+    ss.setStateValidityChecker(_state_validity_checker(si, validity_check_fn))
 
     # Create start state
-    start_state = ob.State(space)
+    start_state = _alloc_state(space)
     for i in range(info.n_joints):
         start_state[i] = float(start[i])
 
     # Create goal state
-    goal_state = ob.State(space)
+    goal_state = _alloc_state(space)
     for i in range(info.n_joints):
         goal_state[i] = float(goal[i])
 
     ss.setStartAndGoalStates(start_state, goal_state)
 
     # Set up planner
-    si = ss.getSpaceInformation()
     planner = planner_type(si)
     planner.setRange(max_step_size)
     ss.setPlanner(planner)
@@ -193,17 +217,18 @@ def xplan(
 
     # Create SimpleSetup
     ss = og.SimpleSetup(space)
-    ss.setStateValidityChecker(ob.StateValidityCheckerFn(validity_check_fn))
+    si = ss.getSpaceInformation()
+    ss.setStateValidityChecker(_state_validity_checker(si, validity_check_fn))
 
     # Create start state
-    start_state = ob.State(space)
+    start_state = _alloc_state(space)
     if use_quaternions:
         set_se3_state(start_state, start_pose, use_quaternions)
     else:
         set_compound_state(start_state, start_pose)
 
     # Create goal state
-    goal_state = ob.State(space)
+    goal_state = _alloc_state(space)
     if use_quaternions:
         set_se3_state(goal_state, goal_pose, use_quaternions)
     else:
@@ -212,7 +237,6 @@ def xplan(
     ss.setStartAndGoalStates(start_state, goal_state)
 
     # Set up planner
-    si = ss.getSpaceInformation()
     planner = planner_type(si)
     planner.setRange(max_step_size)
     ss.setPlanner(planner)
@@ -252,24 +276,25 @@ def xplan(
 
 def set_se3_state(state, pose: np.ndarray, use_quaternions: bool = True):
     """Set SE3 state from pose array"""
+    state_value = state() if callable(state) else state
     if use_quaternions:
         # pose: [x, y, z, qx, qy, qz, qw]
-        state().setX(float(pose[0]))
-        state().setY(float(pose[1]))
-        state().setZ(float(pose[2]))
-        rotation = state().rotation()
+        state_value.setX(float(pose[0]))
+        state_value.setY(float(pose[1]))
+        state_value.setZ(float(pose[2]))
+        rotation = state_value.rotation()
         rotation.x = float(pose[3])
         rotation.y = float(pose[4])
         rotation.z = float(pose[5])
         rotation.w = float(pose[6])
     else:
         # pose: [x, y, z, roll, pitch, yaw]
-        state().setX(float(pose[0]))
-        state().setY(float(pose[1]))
-        state().setZ(float(pose[2]))
-        state().setRoll(float(pose[3]))
-        state().setPitch(float(pose[4]))
-        state().setYaw(float(pose[5]))
+        state_value.setX(float(pose[0]))
+        state_value.setY(float(pose[1]))
+        state_value.setZ(float(pose[2]))
+        state_value.setRoll(float(pose[3]))
+        state_value.setPitch(float(pose[4]))
+        state_value.setYaw(float(pose[5]))
 
 
 def get_se3_pose(state):
