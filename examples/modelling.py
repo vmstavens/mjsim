@@ -20,6 +20,11 @@ class Sim(ms.BaseSim):
         f_gripper = scene.worldbody.add_frame()
         scene.attach(gripper, "gripper/", frame=f_gripper)
 
+        # load mesh
+        mesh = ms.mesh("examples/assets/stanford-bunny.obj",model_name="bunny")
+        f_mesh = scene.worldbody.add_frame(pos=[-0.2, 0, 0], euler=[1.57,0,0])
+        scene.attach(mesh, prefix="bunny", frame=f_mesh)
+
         # load cable
         cable = ms.cable()
         f_cable = scene.worldbody.add_frame(pos=[-0.4, 0, 0])
