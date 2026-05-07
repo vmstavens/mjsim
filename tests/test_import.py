@@ -35,6 +35,7 @@ def test_root_exports_public_convenience_api() -> None:
         "pipe",
         "get_pose",
         "set_pose",
+        "set_state",
         "name2id",
         "id2name",
         "get_contact_states",

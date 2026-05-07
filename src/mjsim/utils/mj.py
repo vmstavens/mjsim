@@ -1,13 +1,12 @@
-import os
-import xml.etree.ElementTree as ET
+"""Utilities for querying and modifying MuJoCo models and simulation data."""
+
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import List, Optional, Tuple, Union
-from xml.dom import minidom
 
 import mujoco as mj
 import numpy as np
+from numpy.typing import ArrayLike
 import spatialmath as sm
 import spatialmath.base as smb
 
@@ -246,7 +245,25 @@ def get_names(model: mj.MjModel, obj_type: ObjType) -> List[str]:
 
 def get_type(
     model: mj.MjModel, identifier: Union[int, str], obj_type: ObjType
-) -> Union[JointType, ObjType]:
+) -> Union[JointType, ObjType, int]:
+    """
+    Return the MuJoCo type for a named or indexed model object.
+
+    Parameters
+    ----------
+    model : mj.MjModel
+        The model containing the object.
+    identifier : int or str
+        The object ID or name.
+    obj_type : ObjType
+        The object category to query.
+
+    Returns
+    -------
+    JointType, ObjType, or int
+        The joint type for joints, ``ObjType.NOOBJECT`` if the object does not
+        exist, or the raw MuJoCo type value for supported non-joint objects.
+    """
     if not does_exist(model, identifier, obj_type):
         return ObjType.NOOBJECT
 
@@ -1024,198 +1041,121 @@ def get_joint_dim(
     return len(data.joint(joint_name).qpos)
 
 
-def load_keyframe(
+def set_state(
     model: mj.MjModel,
     data: mj.MjData,
-    keyframe_name: str,
-    file_path: str,
-    return_xml: bool = False,
-    log: bool = True,
-    step: bool = True,
-) -> Optional[str]:
+    key: Union[int, str, None] = None,
+    *,
+    time: Optional[float] = None,
+    qpos: Optional[ArrayLike] = None,
+    qvel: Optional[ArrayLike] = None,
+    act: Optional[ArrayLike] = None,
+    ctrl: Optional[ArrayLike] = None,
+    mpos: Optional[ArrayLike] = None,
+    mquat: Optional[ArrayLike] = None,
+    mocap_pos: Optional[ArrayLike] = None,
+    mocap_quat: Optional[ArrayLike] = None,
+    keyframe: Union[int, str, None] = None,
+    forward: bool = True,
+) -> None:
     """
-    Load a MuJoCo simulation state from a specified keyframe in an XML file or string.
+    Set ``data`` from a keyframe and/or explicit state fields.
+
+    If ``key`` is provided, the function first resets ``data`` with
+    ``mj_resetDataKeyframe``. Any explicit state fields are then copied into
+    ``data`` so a stored keyframe can be used as a base state with small
+    overrides. If no keyframe exists or no key is desired, pass the state fields
+    directly.
 
     Parameters
     ----------
     model : mj.MjModel
-        The MuJoCo model object which defines the simulation.
+        The MuJoCo model containing keyframes and size metadata.
     data : mj.MjData
-        The MuJoCo data object to load the state into.
-    keyframe_name : str
-        The name of the keyframe state to load.
-    return_xml : bool, optional
-        If True, return the XML content as a string instead of loading it into the model. Defaults to False.
-    file_path : str, optional
-        Path to the XML file to load from. If None, defaults to "keyframes/<file_name>.xml".
-    log : bool, optional
-        Whether to log the loading action. Defaults to True.
-    step : bool, optional
-        Whether to step the simulation after loading the state. Defaults to True.
-
-    Returns
-    -------
-    Optional[str]
-        If return_xml is True, returns the XML content as a string. Otherwise, returns None.
+        The simulation data to update.
+    key : int or str, optional
+        Keyframe index or name to load before applying explicit fields.
+    time : float, optional
+        Simulation time to assign to ``data.time``.
+    qpos, qvel, act, ctrl : array-like, optional
+        Values copied into the corresponding flat ``MjData`` arrays.
+    mpos, mquat : array-like, optional
+        Keyframe-style names for mocap body positions and quaternions.
+    mocap_pos, mocap_quat : array-like, optional
+        Clear aliases for ``mpos`` and ``mquat``.
+    keyframe : int or str, optional
+        Backward-compatible alias for ``key``.
+    forward : bool, optional
+        If True, call ``mj_forward`` after resetting so derived quantities such
+        as body poses, sites, and sensors match the new state.
 
     Raises
     ------
     ValueError
-        If the specified state_name does not correspond to a valid keyframe.
-    FileNotFoundError
-        If the specified file_path does not exist.
+        If a keyframe is missing or a provided array has the wrong size.
+    TypeError
+        If ``key`` is neither a string, integer, nor ``None``.
     """
+    if key is not None and keyframe is not None:
+        raise ValueError("Use either key or keyframe, not both.")
+    if key is None:
+        key = keyframe
 
-    if return_xml:
-        # Load XML content from file and return as string
-        if os.path.exists(file_path):
-            with open(file_path, "r") as file:
-                xml_content = file.read()
-            return xml_content
-        else:
-            print(f"File {file_path} not found.")
-            return None
+    if mpos is not None and mocap_pos is not None:
+        raise ValueError("Use either mpos or mocap_pos, not both.")
+    if mquat is not None and mocap_quat is not None:
+        raise ValueError("Use either mquat or mocap_quat, not both.")
+    if mpos is None:
+        mpos = mocap_pos
+    if mquat is None:
+        mquat = mocap_quat
 
-    # Proceed with loading state from file
-    if os.path.exists(file_path):
-        tree = ET.parse(file_path)
-        root = tree.getroot()
-
-        keyframe_element = root.find(".//keyframe")
-        if keyframe_element is not None:
-            try:
-                state_id = model.keyframe(keyframe_name).id
-            except Exception as e:
+    def _copy_array(name: str, target: np.ndarray, value: ArrayLike) -> None:
+        array = np.asarray(value, dtype=target.dtype)
+        if array.shape != target.shape:
+            if array.size != target.size:
                 raise ValueError(
-                    f'"{keyframe_name}" does not seem to be available as a state, have you remembered to include the keyframes in your scene file? ERROR({e})'
+                    f"{name} has size {array.size}, expected {target.size} "
+                    f"for shape {target.shape}."
                 )
+            array = array.reshape(target.shape)
+        target[:] = array
 
-            mj.mj_resetDataKeyframe(model, data, state_id)
-            if log:
-                print(f'Loaded : "{keyframe_name}" keyframe')
-    else:
-        print(f"File {file_path} not found.")
-    if step:
-        mj.mj_step(model, data)
+    if isinstance(key, str):
+        try:
+            keyframe_id = model.keyframe(key).id
+        except Exception as e:
+            raise ValueError(
+                f"Keyframe '{key}' not found. Available keyframes: "
+                f"{get_names(model, ObjType.KEY)}"
+            ) from e
+        mj.mj_resetDataKeyframe(model, data, keyframe_id)
+    elif isinstance(key, int):
+        if key < 0 or key >= model.nkey:
+            raise ValueError(
+                f"Keyframe index {key} out of range. Model has {model.nkey} keyframes."
+            )
+        mj.mj_resetDataKeyframe(model, data, key)
+    elif key is not None:
+        raise TypeError(f"key must be a name or index, got {type(key).__name__}.")
 
+    if time is not None:
+        data.time = float(time)
+    if qpos is not None:
+        _copy_array("qpos", data.qpos, qpos)
+    if qvel is not None:
+        _copy_array("qvel", data.qvel, qvel)
+    if act is not None:
+        _copy_array("act", data.act, act)
+    if ctrl is not None:
+        _copy_array("ctrl", data.ctrl, ctrl)
+    if mpos is not None:
+        _copy_array("mpos", data.mocap_pos, mpos)
+    if mquat is not None:
+        _copy_array("mquat", data.mocap_quat, mquat)
 
-def mk_keyframe_file(file_path: str) -> Path | None:
-    """
-    Creates a keyframe file for a given MuJoCo simulation file if it does not already exist.
-
-    This function checks if a keyframe file already exists for the provided file path.
-    If not, it creates an empty keyframe XML file in the "keyframes" directory with the same
-    name as the input file, but with an `.xml` extension.
-
-    Args:
-        file_path (str): The path to the simulation file for which a keyframe file is to be created.
-
-    Returns:
-        Path | None: The path to the keyframe file if created or already exists, otherwise None.
-    """
-    path = Path(file_path)
-
-    # Check if the input file exists
-    if not path.exists():
-        print(f"[mk_keyframe_file]: The file '{file_path}' does not exist.")
-        return None
-
-    # Prepare the output keyframe file path
-    save_path = Path("keyframes") / (path.stem + ".xml")
-
-    # Check if the keyframe file already exists
-    if save_path.exists():
-        print(f"[mk_keyframe_file]: Keyframe file already exists at '{save_path}'.")
-        return save_path
-
-    # Ensure the "keyframes" directory exists
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Create the empty keyframe XML content
-    empty_keyframes_file = r"""
-    <?xml version="1.0" ?>
-    <mujoco>
-        <keyframe>
-        </keyframe>
-    </mujoco>
-    """
-
-    # Write the empty keyframe file to the save path
-    with open(save_path, "w") as f:
-        f.write(empty_keyframes_file.strip())
-
-    print(f"[mk_keyframe_file]: Keyframe file created at '{save_path}'.")
-    return save_path
-
-
-def save_keyframe(
-    model: mj.MjModel,
-    data: mj.MjData,
-    keyframe_name: str,
-    save_path: str,
-) -> None:
-    """
-    Save the current state of a MuJoCo simulation to an XML file as a keyframe.
-
-    Parameters
-    ----------
-    model : mj.MjModel
-        The MuJoCo model object.
-    data : mj.MjData
-        The MuJoCo data object containing the current simulation state.
-    keyframe_name : str
-        The name to associate with the saved state.
-    save_path : str
-        The file path where the keyframes XML will be saved.
-
-    Notes
-    -----
-    - If the file doesn't exist, it is created with a root `<mujoco>` tag.
-    - If a keyframe with the same name already exists, it will be overwritten.
-    """
-
-    def format_array(array) -> str:
-        """Format a NumPy array into a space-separated string."""
-        return " ".join(map(str, np.asarray(array).flatten()))
-
-    # Check if the file exists and load or initialize the XML
-    if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
-        tree = ET.parse(save_path)
-        root = tree.getroot()
-    else:
-        root = ET.Element("mujoco")
-        tree = ET.ElementTree(root)
-
-    # Find or create the <keyframe> element
-    keyframe_element = root.find("keyframe")
-    if keyframe_element is None:
-        keyframe_element = ET.SubElement(root, "keyframe")
-
-    # Check for an existing keyframe with the same name
-    existing_key = keyframe_element.find(f"./key[@name='{keyframe_name}']")
-    if existing_key is not None:
-        key_element = existing_key
-        print(f"[save_keyframe]: overwriting {key_element}")
-    else:
-        key_element = ET.SubElement(keyframe_element, "key")
-        key_element.set("name", keyframe_name)
-
-    # Update the keyframe attributes
-    key_element.set("time", f"{data.time:.6f}")
-    key_element.set("qpos", format_array(data.qpos))
-    key_element.set("qvel", format_array(data.qvel))
-    key_element.set("ctrl", format_array(data.ctrl))
-    key_element.set("mpos", format_array(data.mocap_pos))
-    key_element.set("mquat", format_array(data.mocap_quat))
-
-    # Save the updated XML to file
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    with open(save_path, "w", encoding="utf-8") as file:
-        rough_string = ET.tostring(root, encoding="utf-8")
-        reparsed = minidom.parseString(rough_string)
-        file.write(reparsed.toprettyxml(indent="    "))
-
-    print(f"Saved keyframe '{keyframe_name}' to '{save_path}'.")
+    if forward:
+        mj.mj_forward(model, data)
 
 
 def apply_wrench(
@@ -1318,14 +1258,26 @@ def get_geoms_in_contact(model: mj.MjModel, data: mj.MjData) -> List[Tuple[str, 
 
 
 def get_bodies_in_contact(model: mj.MjModel, data: mj.MjData) -> List[Tuple[str, str]]:
+    """
+    Return body-name pairs for all current geom contacts.
+
+    Parameters
+    ----------
+    model : mj.MjModel
+        The MuJoCo model containing body and geom metadata.
+    data : mj.MjData
+        The simulation data containing active contacts.
+
+    Returns
+    -------
+    List[Tuple[str, str]]
+        Body-name pairs corresponding to the contacting geom pairs.
+    """
     geom_ids_in_contact = []
 
     for i in range(data.ncon):
         contact = data.contact[i]
         geom_ids_in_contact.append((contact.geom1, contact.geom2))
-
-    # gids = [gid for gid in geom_ids_in_contact]
-    # bids = [model.geom_bodyid[gid[0]] for gid in gids]
 
     body_names = [
         (
@@ -1633,7 +1585,19 @@ def is_robot_entity(entity_name: str, robot_name: str) -> bool:
 
 
 class RobotInfo:
+    """Convenience view of model objects belonging to a robot namespace."""
+
     def __init__(self, model: mj.MjModel, name: str):
+        """
+        Collect IDs and names for robot-scoped bodies, geoms, joints, and sensors.
+
+        Parameters
+        ----------
+        model : mj.MjModel
+            The MuJoCo model to inspect.
+        name : str
+            Robot namespace prefix, for example ``"ur5e"`` or ``"robot"``.
+        """
         self.name = name
         self.m = model
 
@@ -2096,6 +2060,27 @@ def add_act_freejoint(
     kv_pos: float = 1000,
     kv_ori: float = 1000,
 ) -> mj.MjSpec:
+    """
+    Add six position-controlled joints and actuators to the first body in a spec.
+
+    Parameters
+    ----------
+    spec : mj.MjSpec
+        The MuJoCo spec to modify.
+    x_lim, y_lim, z_lim : tuple[float], optional
+        Translation joint and actuator control limits.
+    roll_lim, pitch_lim, yaw_lim : tuple[float], optional
+        Rotation joint and actuator control limits.
+    kp_pos, kp_ori : float, optional
+        Position gains for translational and rotational actuators.
+    kv_pos, kv_ori : float, optional
+        Velocity gains for translational and rotational actuators.
+
+    Returns
+    -------
+    mj.MjSpec
+        The modified spec.
+    """
     base = spec.worldbody.first_body()
     base.add_joint(name="x", axis=[1, 0, 0], type=mj.mjtJoint.mjJNT_SLIDE, range=x_lim)
     base.add_joint(name="y", axis=[0, 1, 0], type=mj.mjtJoint.mjJNT_SLIDE, range=y_lim)

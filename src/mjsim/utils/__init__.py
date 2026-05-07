@@ -8,6 +8,7 @@ from mjsim.utils.mj import (
     get_joint_q,
     get_pose,
     name2id,
+    set_state,
 )
 from mjsim.utils.mjs import cable, cloth, empty_scene, pipe, replicate
 from mjsim.utils.ompl import qplan, xplan
@@ -20,6 +21,7 @@ __all__ = [
     "get_joint_q",
     "get_pose",
     "name2id",
+    "set_state",
     "cable",
     "cloth",
     "pipe",
