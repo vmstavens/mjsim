@@ -1,12 +1,14 @@
 from datetime import datetime
+from importlib.resources import files
 from typing import Tuple, Union
 
 import cv2
 import mujoco as mj
 import numpy as np
-from mj_sim.sensors import Camera
 from PIL import Image
 from scipy.ndimage import gaussian_filter
+
+from mjsim.sensors.camera import Camera
 
 
 class GelSightMini(Camera):
@@ -50,9 +52,13 @@ class GelSightMini(Camera):
         self._save_dir = self.cam._save_dir
         self._renderer = self.cam._renderer
 
-        self._background_img = cv2.imread(
-            "sensors/gelsight_mini/assets/background_gelsight2017.jpg"
+        background_path = files("mjsim.sensors.gelsight_mini").joinpath(
+            "assets/background_gelsight2017.jpg"
         )
+        self._background_img = cv2.imread(str(background_path))
+        if self._background_img is None:
+            msg = f"Failed to load GelSight background image: {background_path}"
+            raise FileNotFoundError(msg)
 
         # ensure that background image matches resolution of camera image
         self._background_img = np.array(
@@ -440,10 +446,6 @@ class GelSightMini(Camera):
                 else 1
             )
             deformation2 = np.maximum(r * deformation2_, protrusion_depth)
-
-        deformation_v1 = self._apply_elastic_deformation_gauss(
-            protrusion_depth, not_in_touch, in_touch
-        )
 
         for i in range(self._t):
             deformation_ = cv2.filter2D(deformation2, -1, kernel)

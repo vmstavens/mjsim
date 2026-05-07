@@ -43,3 +43,6 @@ Repository = "https://github.com/vmstavens/mjsim"
 
 [project.scripts]
 mjsim-stubgen = "mjsim._stubgen:main"
+
+[tool.uv.build-backend]
+source-exclude = ["examples/**"]

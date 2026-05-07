@@ -1,63 +1,78 @@
 """
-Minimal camera capture demo.
+Camera capture demo.
 
-Builds a tiny MuJoCo scene with a ground plane and a camera, then grabs RGB and
-depth images using `mjsim.sensors.camera.Camera`. Prints image shapes instead of
-opening a viewer so it runs headless.
+Run the simulation, press C in the MuJoCo viewer, and the camera image opens in
+an OpenCV window.
 """
 
-from importlib import resources
-from pathlib import Path
-
-import numpy as np
-
-try:
-    import mujoco as mj
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    raise SystemExit("MuJoCo is not installed. Install `mujoco` to run this example.")
+import cv2
+import glfw
+import mjsim as ms
+import mujoco as mj
 
 from mjsim.sensors.camera import Camera
 
 
-def _build_model() -> tuple[mj.MjModel, mj.MjData]:
-    """Create a minimal scene that includes a camera named 'front'."""
-    xml = """
-    <mujoco model="camera_demo">
-      <option timestep="0.002" gravity="0 0 -9.81" />
-      <visual>
-        <headlight diffuse="0.6 0.6 0.6" ambient="0.1 0.1 0.1" specular="0 0 0" />
-      </visual>
-      <asset>
-        <texture type="skybox" builtin="gradient" rgb1="0.6 0.7 0.8" rgb2="0.2 0.3 0.4" width="512" height="512"/>
-      </asset>
-      <worldbody>
-        <light pos="1 0 1" dir="-1 0 -1" directional="true" />
-        <geom name="floor" size="0 0 0.2" type="plane" rgba="0.9 0.9 0.9 1"/>
-        <geom name="box" type="box" size="0.05 0.05 0.05" pos="0.2 0.0 0.05" rgba="0.8 0.2 0.2 1" />
-        <camera name="front" pos="0.6 0 0.3" euler="0 0 3.14"/>
-      </worldbody>
-    </mujoco>
-    """
-    model = mj.MjModel.from_xml_string(xml)
-    data = mj.MjData(model)
-    return model, data
+class Sim(ms.BaseSim):
+    def __init__(self) -> None:
+        super().__init__()
+        self._model, self._data = self._init()
+        self.camera = Camera(
+            self.model,
+            self.data,
+            cam_name="front",
+            width=640,
+            height=480,
+            save_dir="tmp/cam/",
+        )
 
+    def _init(self) -> tuple[mj.MjModel, mj.MjData]:
+        scene = ms.empty_scene(sim_name="camera_demo")
 
-def main() -> None:
-    model, data = _build_model()
-    cam = Camera(
-        model, data, cam_name="front", width=320, height=240, save_dir="tmp/cam/"
-    )
+        b_target = scene.worldbody.add_body(name="box")
 
-    # Step once to ensure the scene is initialized.
-    mj.mj_forward(model, data)
+        b_target.add_geom(
+            name="box",
+            type=mj.mjtGeom.mjGEOM_BOX,
+            size=[0.05, 0.05, 0.05],
+            pos=[0.2, 0.0, 0.05],
+            rgba=[0.8, 0.2, 0.2, 1.0],
+        )
+        scene.worldbody.add_camera(
+            name="front",
+            pos=[0.6, 0.0, 0.3],
+            euler=[0.0, 0.0, 3.14],
+            fovy=45.0,
+            targetbody="box",
+            mode=mj.mjtCamLight.mjCAMLIGHT_TARGETBODY
+        )
 
-    rgb = cam.image
-    depth = cam.depth_image
+        model = scene.compile()
+        data = mj.MjData(model)
+        mj.mj_forward(model, data)
+        return model, data
 
-    print("RGB image shape:", rgb.shape, "dtype:", rgb.dtype)
-    print("Depth image shape:", depth.shape, "dtype:", depth.dtype)
+    @property
+    def model(self) -> mj.MjModel:
+        return self._model
+
+    @property
+    def data(self) -> mj.MjData:
+        return self._data
+
+    def keyboard_callback(self, key: int) -> None:
+        if key == glfw.KEY_C:
+            rgb = self.camera.image
+            cv2.imshow("front camera", cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+            cv2.waitKey(1)
+            print(f"Captured image from camera 'front': {rgb.shape} {rgb.dtype}")
+
+        if key == glfw.KEY_Q:
+            cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
-    main()
+    sim = Sim()
+    print("Press C in the MuJoCo viewer to capture the camera image.")
+    print("Press Q to close OpenCV image windows.")
+    sim.run()
