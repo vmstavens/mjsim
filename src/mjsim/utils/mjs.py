@@ -118,6 +118,27 @@ def _set_disable_flag(option: Any, flag: int, disabled: bool) -> None:
         option.disableflags &= ~flag
 
 
+def _set_multiccd(option: Any, enabled: bool) -> None:
+    if hasattr(mj.mjtEnableBit, "mjENBL_MULTICCD"):
+        _set_enable_flag(
+            option,
+            int(mj.mjtEnableBit.mjENBL_MULTICCD),
+            enabled=enabled,
+        )
+        return
+
+    if hasattr(mj.mjtDisableBit, "mjDSBL_MULTICCD"):
+        _set_disable_flag(
+            option,
+            int(mj.mjtDisableBit.mjDSBL_MULTICCD),
+            disabled=not enabled,
+        )
+        return
+
+    msg = "MuJoCo does not expose a multi-CCD option flag"
+    raise AttributeError(msg)
+
+
 def empty_scene(
     sim_name: str = "mj_sim",
     multiccd: bool = False,
@@ -214,11 +235,7 @@ def empty_scene(
     if iterations is not None:
         spec.option.iterations = int(iterations)
 
-    _set_enable_flag(
-        spec.option,
-        int(mj.mjtEnableBit.mjENBL_MULTICCD),
-        enabled=enable_multiccd,
-    )
+    _set_multiccd(spec.option, enabled=enable_multiccd)
     nativeccd_enabled = multiccd if nativeccd is None else nativeccd
     _set_disable_flag(
         spec.option,

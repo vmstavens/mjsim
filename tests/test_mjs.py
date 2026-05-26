@@ -80,6 +80,10 @@ def test_empty_scene_uses_spec_options():
     assert model.opt.timestep == pytest.approx(0.001)
     assert model.opt.tolerance == pytest.approx(1e-6)
     assert model.opt.iterations == 50
+    if hasattr(mj.mjtDisableBit, "mjDSBL_MULTICCD"):
+        assert model.opt.disableflags & mj.mjtDisableBit.mjDSBL_MULTICCD == 0
+    elif hasattr(mj.mjtEnableBit, "mjENBL_MULTICCD"):
+        assert model.opt.enableflags & mj.mjtEnableBit.mjENBL_MULTICCD
     assert model.opt.disableflags & mj.mjtDisableBit.mjDSBL_NATIVECCD == 0
     assert model.ngeom == 1
     assert model.nlight == 1
