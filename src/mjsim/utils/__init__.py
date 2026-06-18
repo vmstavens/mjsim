@@ -3,24 +3,28 @@
 from mjsim.utils.mj import (
     ObjType,
     RobotInfo,
+    curve_dlo,
     get_joint_ddq,
     get_joint_dq,
     get_joint_q,
     get_pose,
     name2id,
     set_state,
+    update_dlo_ref,
 )
 from mjsim.utils.mjs import cable, cloth, empty_scene, pipe, replicate
 
 __all__ = [
     "ObjType",
     "RobotInfo",
+    "curve_dlo",
     "get_joint_ddq",
     "get_joint_dq",
     "get_joint_q",
     "get_pose",
     "name2id",
     "set_state",
+    "update_dlo_ref",
     "cable",
     "cloth",
     "pipe",

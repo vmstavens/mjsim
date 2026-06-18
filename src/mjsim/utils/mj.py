@@ -2137,6 +2137,91 @@ def add_act_freejoint(
     return spec
 
 
+def _model_name(model: mj.MjModel | mjx.Model, name_adr: int) -> str:
+    if name_adr < 0:
+        return ""
+
+    names = model.names
+    if not isinstance(names, bytes):
+        names = np.asarray(names).tobytes()
+
+    end = names.find(b"\0", name_adr)
+    if end < 0:
+        end = len(names)
+    return names[name_adr:end].decode()
+
+
+def _joint_name(model: mj.MjModel | mjx.Model, joint_id: int) -> str:
+    if isinstance(model, mj.MjModel):
+        return mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id) or ""
+
+    name_adrs = np.asarray(model.name_jntadr)
+    if joint_id < 0 or joint_id >= name_adrs.size:
+        return ""
+    return _model_name(model, int(name_adrs[joint_id]))
+
+
+def _set_qpos_spring(
+    model: mj.MjModel | mjx.Model,
+    qpos_adr: int,
+    value: np.ndarray,
+) -> mj.MjModel | mjx.Model:
+    qpos_spring = model.qpos_spring
+    value = np.asarray(value, dtype=np.asarray(qpos_spring).dtype)
+
+    if isinstance(model, mj.MjModel):
+        qpos_spring[qpos_adr : qpos_adr + value.size] = value
+        return model
+
+    if hasattr(qpos_spring, "at"):
+        qpos_spring = qpos_spring.at[qpos_adr : qpos_adr + value.size].set(value)
+    else:
+        qpos_spring = np.asarray(qpos_spring).copy()
+        qpos_spring[qpos_adr : qpos_adr + value.size] = value
+
+    return model.replace(qpos_spring=qpos_spring)
+
+
+def update_dlo_ref(
+    model: mj.MjModel | mjx.Model,
+    qpos: np.ndarray,
+    cable_name: str,
+    joint_name: str | None = None,
+) -> tuple[mj.MjModel | mjx.Model, list[str]]:
+    """Update DLO cable ball-joint spring references from a qpos vector.
+
+    MuJoCo models are mutated in place. MJX models are immutable, so the updated
+    model is returned.
+    """
+    nq = int(np.asarray(model.nq))
+    qpos = np.asarray(qpos, dtype=np.float64)
+    if qpos.ndim != 1 or qpos.size < nq:
+        raise ValueError(f"qpos must be a 1D vector with at least {nq} values")
+
+    updated: list[str] = []
+    for joint_id in range(int(np.asarray(model.njnt))):
+        name = _joint_name(model, joint_id)
+        if not name or cable_name not in name:
+            continue
+        if joint_name is not None and name != joint_name:
+            continue
+        if int(np.asarray(model.jnt_type[joint_id])) != int(mj.mjtJoint.mjJNT_BALL):
+            continue
+
+        qpos_adr = int(np.asarray(model.jnt_qposadr[joint_id]))
+        quat = qpos[qpos_adr : qpos_adr + 4].copy()
+        norm = np.linalg.norm(quat)
+        if norm < 1e-8:
+            quat[:] = (1.0, 0.0, 0.0, 0.0)
+        else:
+            quat /= norm
+
+        model = _set_qpos_spring(model, qpos_adr, quat)
+        updated.append(name)
+
+    return model, updated
+
+
 def curve_dlo(
     data: mj.MjData | mjx.Data,
     model: mj.MjModel | mjx.Model,
