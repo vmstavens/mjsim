@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import mink
@@ -15,6 +15,80 @@ from mjsim.utils.mj import (
     get_pose,
     name2id,
 )
+
+
+def _dense_mass_matrix(model: mj.MjModel, data: mj.MjData) -> np.ndarray:
+    """Return the full dense generalized inertia matrix for the current state.
+
+    MuJoCo 3.8 introduced ``mjData.M`` in CSR-like sparse symmetric storage and
+    ``mju_sym2dense`` as the forward-compatible extraction path. The legacy
+    ``mjData.qM`` storage and ``mj_fullM(model, dst, data.qM)`` signature are
+    scheduled for removal; upcoming MuJoCo versions change ``mj_fullM`` to
+    ``mj_fullM(model, data, dst)``.
+
+    This helper prefers the new ``data.M`` path, then falls back to the future
+    ``mj_fullM`` signature, then to the legacy ``qM`` signature.
+    """
+    dense = np.zeros((model.nv, model.nv))
+
+    if hasattr(data, "M") and hasattr(mj, "mju_sym2dense"):
+        try:
+            mj.mju_sym2dense(
+                dense,
+                data.M,
+                model.M_rownnz,
+                model.M_rowadr,
+                model.M_colind,
+            )
+            return dense
+        except TypeError:
+            try:
+                # Some C-level documentation includes nv explicitly. Keep this
+                # branch for bindings that expose that spelling.
+                mj.mju_sym2dense(
+                    dense,
+                    data.M,
+                    model.nv,
+                    model.M_rownnz,
+                    model.M_rowadr,
+                    model.M_colind,
+                )
+                return dense
+            except TypeError:
+                pass
+
+    try:
+        mj.mj_fullM(model, data, dense)
+        return dense
+    except TypeError:
+        if not hasattr(data, "qM"):
+            raise
+
+    mj.mj_fullM(model, dense, data.qM)
+    return dense
+
+
+def sm_to_smx(T: sm.SE3):
+    """Convert a SpatialMath SE3 pose to a Mink SE3 pose."""
+    return mink.SE3.from_matrix(np.array(T.A))
+
+
+def smx_to_sm(T) -> sm.SE3:
+    """Convert a Mink SE3 pose to a SpatialMath SE3 pose."""
+    return sm.SE3(np.array(T.as_matrix()))
+
+
+@dataclass(frozen=True)
+class IKResult:
+    """Result from a Robot inverse-kinematics solve."""
+
+    q: np.ndarray
+    success: bool
+    iterations: int
+    position_error: float
+    orientation_error: float
+    qpos: np.ndarray
+    message: str = ""
 
 
 class Robot:
@@ -256,17 +330,9 @@ class Robot:
     @property
     def Mq(self) -> np.ndarray:
         """Joint-space inertia matrix."""
-        sys_Mq_inv = np.zeros((self.model.nv, self.model.nv))
-
-        mj.mj_solveM(self.model, self.data, sys_Mq_inv, np.eye(self.model.nv))
-
-        dof_indices = np.ravel(self.info._dof_indxs)  # Flatten to 1D if not already
-        Mq_inv = sys_Mq_inv[np.ix_(dof_indices, dof_indices)]
-
-        if abs(np.linalg.det(Mq_inv)) >= 1e-2:
-            self._Mq = np.linalg.inv(Mq_inv)
-        else:
-            self._Mq = np.linalg.pinv(Mq_inv, rcond=1e-2)
+        sys_Mq = _dense_mass_matrix(self.model, self.data)
+        dof_indices = self.robot_dof_indices
+        self._Mq = sys_Mq[np.ix_(dof_indices, dof_indices)]
         return self._Mq
 
     def Mx(
@@ -315,6 +381,257 @@ class Robot:
             [get_joint_ddq(self.data, self.model, jn) for jn in self.info._joint_ids]
         ).flatten()
 
+    @property
+    def robot_qpos_indices(self) -> np.ndarray:
+        """Full-model qpos indices controlled by this robot wrapper."""
+        indices: list[int] = []
+        for joint_id in self.info._joint_ids:
+            qpos_adr = int(self.model.jnt_qposadr[joint_id])
+            joint_type = int(self.model.jnt_type[joint_id])
+            if joint_type == int(mj.mjtJoint.mjJNT_FREE):
+                width = 7
+            elif joint_type == int(mj.mjtJoint.mjJNT_BALL):
+                width = 4
+            else:
+                width = 1
+            indices.extend(range(qpos_adr, qpos_adr + width))
+        return np.array(indices, dtype=int)
+
+    @property
+    def robot_dof_indices(self) -> np.ndarray:
+        """Full-model qvel/qfrc DOF indices controlled by this robot wrapper."""
+        indices: list[int] = []
+        for joint_id in self.info._joint_ids:
+            dof_adr = int(self.model.jnt_dofadr[joint_id])
+            joint_type = int(self.model.jnt_type[joint_id])
+            if joint_type == int(mj.mjtJoint.mjJNT_FREE):
+                width = 6
+            elif joint_type == int(mj.mjtJoint.mjJNT_BALL):
+                width = 3
+            else:
+                width = 1
+            indices.extend(range(dof_adr, dof_adr + width))
+        return np.array(indices, dtype=int)
+
+    def full_qpos_to_robot_q(self, qpos_full: np.ndarray) -> np.ndarray:
+        """Extract this robot's qpos block from a full MuJoCo qpos vector."""
+        qpos_full = np.asarray(qpos_full, dtype=float).reshape(-1)
+        if qpos_full.size != self.model.nq:
+            msg = f"qpos_full has size {qpos_full.size}, expected {self.model.nq}"
+            raise ValueError(msg)
+        return qpos_full[self.robot_qpos_indices].copy()
+
+    def robot_q_to_full_qpos(
+        self, q_robot: np.ndarray, qpos_ref: Optional[np.ndarray] = None
+    ) -> np.ndarray:
+        """Insert a robot-local q vector into a full MuJoCo qpos vector."""
+        q_robot = np.asarray(q_robot, dtype=float).reshape(-1)
+        if q_robot.size == self.model.nq:
+            return q_robot.copy()
+
+        qpos_indices = self.robot_qpos_indices
+        if q_robot.size != qpos_indices.size:
+            msg = (
+                f"q_robot has size {q_robot.size}, expected {qpos_indices.size} "
+                f"for robot {self.name!r} or {self.model.nq} for full qpos"
+            )
+            raise ValueError(msg)
+
+        qpos_full = (
+            self.data.qpos.copy()
+            if qpos_ref is None
+            else np.asarray(qpos_ref, dtype=float).reshape(-1).copy()
+        )
+        if qpos_full.size != self.model.nq:
+            msg = f"qpos_ref has size {qpos_full.size}, expected {self.model.nq}"
+            raise ValueError(msg)
+        qpos_full[qpos_indices] = q_robot
+        return qpos_full
+
+    def _resolve_frame_name(self, frame: Union[str, int], frame_type: str) -> str:
+        if frame_type not in {"site", "body", "geom"}:
+            msg = f"Unsupported frame_type {frame_type!r}; expected site, body, or geom"
+            raise ValueError(msg)
+
+        obj_type = {
+            "site": mj.mjtObj.mjOBJ_SITE,
+            "body": mj.mjtObj.mjOBJ_BODY,
+            "geom": mj.mjtObj.mjOBJ_GEOM,
+        }[frame_type]
+
+        if isinstance(frame, int):
+            name = mj.mj_id2name(self.model, obj_type, frame)
+            if name is None:
+                msg = f"No {frame_type} with id {frame}"
+                raise ValueError(msg)
+            return name
+
+        candidates = [frame]
+        namespace = self.name.strip("/")
+        if namespace and not frame.startswith(f"{namespace}/"):
+            candidates.append(f"{namespace}/{frame}")
+
+        for candidate in candidates:
+            if mj.mj_name2id(self.model, obj_type, candidate) >= 0:
+                return candidate
+
+        msg = f"No {frame_type} named {frame!r}; tried {candidates}"
+        raise ValueError(msg)
+
+    def _target_to_mink(
+        self,
+        target: Union[sm.SE3, np.ndarray, object],
+        base_frame: Optional[Union[sm.SE3, str, int]],
+        qpos_full: np.ndarray,
+    ):
+        if isinstance(target, sm.SE3):
+            target_world = sm_to_smx(target)
+        elif isinstance(target, np.ndarray):
+            target_world = mink.SE3.from_matrix(target)
+        elif hasattr(target, "as_matrix"):
+            target_world = target
+        else:
+            msg = f"Unsupported IK target type: {type(target)}"
+            raise TypeError(msg)
+
+        if base_frame is None:
+            return target_world
+
+        if isinstance(base_frame, sm.SE3):
+            T_world_base = sm_to_smx(base_frame)
+        else:
+            frame_name = self._resolve_frame_name(base_frame, "body")
+            conf = mink.Configuration(self.model, q=qpos_full)
+            T_world_base = conf.get_transform_frame_to_world(frame_name, "body")
+
+        return T_world_base @ target_world
+
+    @staticmethod
+    def _task_error_norms(
+        task, configuration: mink.Configuration
+    ) -> tuple[float, float]:
+        error = np.asarray(task.compute_error(configuration), dtype=float).reshape(-1)
+        if error.size < 6:
+            return float(np.linalg.norm(error)), 0.0
+        return float(np.linalg.norm(error[:3])), float(np.linalg.norm(error[3:6]))
+
+    def solve_ik(
+        self,
+        frame: Union[str, int],
+        target: Union[sm.SE3, np.ndarray, object],
+        *,
+        frame_type: str = "site",
+        q0: Optional[np.ndarray] = None,
+        base_frame: Optional[Union[sm.SE3, str, int]] = None,
+        position_cost: Union[float, np.ndarray] = 1.0,
+        orientation_cost: Union[float, np.ndarray] = 1.0,
+        posture_cost: Union[float, np.ndarray] = 1e-3,
+        damping: float = 1e-6,
+        lm_damping: float = 1e-3,
+        solver: str = "daqp",
+        max_iters: int = 100,
+        pos_tol: float = 1e-3,
+        ori_tol: float = 1e-2,
+        dt: Optional[float] = None,
+        inplace: bool = False,
+        collision_avoidance_pairs: Optional[List[Tuple[List[str], List[str]]]] = None,
+        min_collision_distance: float = 0.05,
+        collision_detection_distance: float = 0.1,
+        verbose: bool = False,
+    ) -> IKResult:
+        """Solve single-frame inverse kinematics using Mink.
+
+        ``target`` is interpreted in world coordinates unless ``base_frame`` is
+        provided. The returned ``IKResult.q`` is robot-local and matches
+        ``robot.q``; ``IKResult.qpos`` is the full MuJoCo qpos solution.
+        """
+        frame_name = self._resolve_frame_name(frame, frame_type)
+        qpos_initial = (
+            self.data.qpos.copy()
+            if q0 is None
+            else self.robot_q_to_full_qpos(q0, self.data.qpos)
+        )
+        configuration = mink.Configuration(self.model, q=qpos_initial)
+        target_world = self._target_to_mink(target, base_frame, qpos_initial)
+
+        frame_task = mink.FrameTask(
+            frame_name=frame_name,
+            frame_type=frame_type,
+            position_cost=position_cost,
+            orientation_cost=orientation_cost,
+            lm_damping=lm_damping,
+        )
+        frame_task.set_target(target_world)
+
+        posture_task = mink.PostureTask(
+            self.model,
+            cost=posture_cost,
+            lm_damping=lm_damping,
+        )
+        posture_task.set_target(qpos_initial)
+
+        tasks = [frame_task, posture_task]
+        limits = [mink.ConfigurationLimit(self.model)]
+        if collision_avoidance_pairs:
+            limits.append(
+                mink.CollisionAvoidanceLimit(
+                    model=self.model,
+                    geom_pairs=collision_avoidance_pairs,
+                    minimum_distance_from_collisions=min_collision_distance,
+                    collision_detection_distance=collision_detection_distance,
+                )
+            )
+
+        dt = self.model.opt.timestep if dt is None else float(dt)
+        position_error, orientation_error = self._task_error_norms(
+            frame_task, configuration
+        )
+        success = position_error <= pos_tol and orientation_error <= ori_tol
+        iterations = 0
+
+        for iterations in range(1, max_iters + 1):
+            if success:
+                break
+
+            velocity = mink.solve_ik(
+                configuration,
+                tasks,
+                dt,
+                solver,
+                damping,
+                limits=limits,
+            )
+            configuration.update(configuration.integrate(velocity, dt))
+            position_error, orientation_error = self._task_error_norms(
+                frame_task, configuration
+            )
+            success = position_error <= pos_tol and orientation_error <= ori_tol
+
+            if verbose:
+                print(
+                    f"IK iter {iterations}: "
+                    f"pos_err={position_error:.3e}, "
+                    f"ori_err={orientation_error:.3e}"
+                )
+
+        qpos_solution = configuration.q.copy()
+        q_solution = self.full_qpos_to_robot_q(qpos_solution)
+
+        if inplace:
+            self.data.qpos[:] = qpos_solution
+            mj.mj_forward(self.model, self.data)
+
+        message = "converged" if success else "maximum iterations reached"
+        return IKResult(
+            q=q_solution,
+            success=success,
+            iterations=iterations,
+            position_error=position_error,
+            orientation_error=orientation_error,
+            qpos=qpos_solution,
+            message=message,
+        )
+
     def ik(
         self,
         T_target: Union[sm.SE3, List[sm.SE3]],
@@ -361,222 +678,53 @@ class Robot:
         Returns:
             Joint configuration that achieves the target(s) within tolerance.
         """
-        # Handle site_names parameter
+        _ = tolerance
         if site_names is None:
-            site_names = self._info.site_names
-        elif isinstance(site_names, str):
-            site_names = [site_names]
-
-        from mink import SE3
-
-        # Handle T_target parameter and keep both mink and spatialmath variants for error checks
-        if isinstance(T_target, sm.SE3):
-            targets_smx = [sm_to_smx(T_target)]
-            targets_sm = [T_target]
-        elif (
-            isinstance(T_target, list)
-            and len(T_target) > 0
-            and isinstance(T_target[0], sm.SE3)
-        ):
-            targets_smx = [sm_to_smx(T) for T in T_target]
-            targets_sm = T_target
+            if not self._info.site_names:
+                msg = "site_names must be provided because this robot has no sites"
+                raise ValueError(msg)
+            frame = self._info.site_names[0]
+        elif isinstance(site_names, list):
+            if len(site_names) != 1:
+                msg = "Robot.ik supports one site; call solve_ik per target"
+                raise NotImplementedError(msg)
+            frame = site_names[0]
         else:
-            targets_smx = T_target
-            targets_sm = [smx_to_sm(T) for T in T_target]
+            frame = site_names
 
-        assert len(targets_smx) == len(site_names), (
-            f"Number of target poses ({len(targets_smx)}) must match number of sites ({len(site_names)})"
+        if isinstance(T_target, list):
+            if len(T_target) != 1:
+                msg = "Robot.ik supports one target; call solve_ik per target"
+                raise NotImplementedError(msg)
+            target = T_target[0]
+        else:
+            target = T_target
+
+        result = self.solve_ik(
+            frame=frame,
+            target=target,
+            frame_type="site",
+            q0=q0,
+            position_cost=position_cost,
+            orientation_cost=orientation_cost,
+            posture_cost=posture_cost,
+            damping=regularization,
+            lm_damping=lm_damping,
+            solver=solver,
+            max_iters=max_iterations * max_attempts,
+            pos_tol=task_position_tolerance,
+            ori_tol=task_orientation_tolerance,
+            collision_avoidance_pairs=collision_avoidance_pairs,
+            min_collision_distance=min_collision_distance,
+            collision_detection_distance=collision_detection_distance,
+            verbose=verbose,
         )
-
-        # Set initial configuration if provided
-        current_q = self._ik_conf.q.copy()
-        if q0 is not None:
-            self._ik_conf.update(q0)
-            q = q0.copy()
-        else:
-            q = current_q.copy()
-
-        # Store original configuration to restore later
-        original_config = self._ik_conf.q.copy()
-        q_change = np.inf
-
-        converged = False
-        attempts = 0
-        while attempts < max_attempts and not converged:
-            for iteration in range(max_iterations):
-                # Update configuration for this iteration
-                self._ik_conf.update(q)
-
-                # Create tasks
-                tasks = []
-
-                # Posture task for regularization
-                posture_task = mink.PostureTask(self.model, cost=posture_cost)
-                posture_task.set_target_from_configuration(self._ik_conf)
-                tasks.append(posture_task)
-
-                # Frame tasks for each site
-                frame_tasks = []
-                for i, site_name in enumerate(site_names):
-                    task = mink.FrameTask(
-                        frame_name=site_name,
-                        frame_type="site",
-                        position_cost=position_cost,
-                        orientation_cost=orientation_cost,
-                        lm_damping=lm_damping,
-                    )
-                    task.set_target(targets_smx[i])
-                    frame_tasks.append(task)
-                    tasks.append(task)
-
-                # Create limits (constraints)
-                limits = [mink.ConfigurationLimit(self.model)]
-
-                # Add collision avoidance if specified
-                if collision_avoidance_pairs:
-                    collision_limit = mink.CollisionAvoidanceLimit(
-                        model=self.model,
-                        geom_pairs=collision_avoidance_pairs,
-                        minimum_distance_from_collisions=min_collision_distance,
-                        collision_detection_distance=collision_detection_distance,
-                    )
-                    limits.append(collision_limit)
-
-                # Solve IK for this iteration
-                vel = mink.solve_ik(
-                    self._ik_conf,
-                    tasks,
-                    self.model.opt.timestep,
-                    solver,
-                    regularization,
-                    limits=limits,
-                )
-
-                # Integrate to get new configuration
-                q_new = self._ik_conf.integrate(vel, self.model.opt.timestep)
-
-                # Check joint space convergence
-                q_change = np.linalg.norm(q_new - q)
-                joint_converged = q_change < tolerance
-
-                # Check task space convergence every iteration
-                task_converged = True
-                max_position_error = 0.0
-                max_orientation_error = 0.0
-
-                # Update configuration to compute FK
-                self._ik_conf.update(q_new)
-
-                def _translation(pose: sm.SE3) -> np.ndarray:
-                    """Return translation for both spatialmath and mink SE3 types."""
-                    if hasattr(pose, "translation"):
-                        return np.array(pose.translation()).reshape(-1)
-                    if hasattr(pose, "t"):
-                        return np.array(pose.t).reshape(-1)
-                    raise AttributeError("Pose does not expose translation or t")
-
-                def _rotation_matrix(pose: sm.SE3) -> np.ndarray:
-                    """Return rotation matrix for both spatialmath and mink SE3 types."""
-                    if hasattr(pose, "R"):
-                        return np.array(pose.R)
-                    if hasattr(pose, "rotation"):
-                        rot = pose.rotation()
-                        if hasattr(rot, "matrix"):
-                            return np.array(rot.matrix())
-                        if hasattr(rot, "as_matrix"):
-                            return np.array(rot.as_matrix())
-                    raise AttributeError("Pose does not expose R or rotation matrix")
-
-                for i, site_name in enumerate(site_names):
-                    current_pose = self.fk(q_new, site_name, base_frame=self._base)
-                    target_pose = targets_sm[i]
-
-                    # Position error
-                    pos_error = np.linalg.norm(
-                        _translation(current_pose) - _translation(target_pose)
-                    )
-                    max_position_error = max(max_position_error, pos_error)
-                    if pos_error > task_position_tolerance:
-                        task_converged = False
-
-                    # Orientation error (angle in radians)
-                    cur_R = _rotation_matrix(current_pose)
-                    tgt_R = _rotation_matrix(target_pose)
-                    rot_error = cur_R.T @ tgt_R
-                    angle_error = np.arccos(np.clip((np.trace(rot_error) - 1) / 2, -1, 1))
-                    max_orientation_error = max(max_orientation_error, angle_error)
-                    if angle_error > task_orientation_tolerance:
-                        task_converged = False
-
-                if verbose and (
-                    iteration % 3 == 0 or joint_converged or task_converged
-                ):
-                    print(
-                        f"IK iter {iteration + 1}: "
-                        f"Δq = {q_change:.2e}, "
-                        f"max_pos_err = {max_position_error:.2e}, "
-                        f"max_rot_err = {max_orientation_error:.2e}"
-                    )
-
-                # Check if we should stop
-                if joint_converged and task_converged:
-                    converged = True
-                    if verbose:
-                        if joint_converged:
-                            print(
-                                f"IK converged in joint space after {iteration + 1} iterations (Δq = {q_change:.2e})"
-                            )
-                        else:
-                            print(
-                                f"IK converged in task space after {iteration + 1} iterations "
-                                f"(pos_err ≤ {task_position_tolerance:.1e}, rot_err ≤ {task_orientation_tolerance:.1e})"
-                            )
-                    q = q_new
-                    break
-
-                q = q_new
-
-            attempts += 1
-
-        if not converged and verbose:
-            # Compute final errors for reporting
-            self._ik_conf.update(q)
-            final_position_errors = []
-            final_orientation_errors = []
-
-            for i, site_name in enumerate(site_names):
-                current_pose = self.fk(q, site_name, base_frame=self._base)
-                target_pose = targets_sm[i]
-
-                pos_error = np.linalg.norm(
-                    current_pose.translation() - target_pose.translation()
-                )
-                final_position_errors.append(pos_error)
-
-                rot_error = current_pose.rotation().inv() * target_pose.rotation()
-                angle_error = np.arccos(
-                    np.clip((np.trace(rot_error.matrix()) - 1) / 2, -1, 1)
-                )
-                final_orientation_errors.append(angle_error)
-
-            max_final_pos = max(final_position_errors) if final_position_errors else 0
-            max_final_rot = (
-                max(final_orientation_errors) if final_orientation_errors else 0
-            )
-
+        if verbose and not result.success:
             print(
-                f"IK reached maximum attempts ({max_attempts}) "
-                f"and iterations ({max_iterations}) without converging"
+                f"IK did not converge: pos_err={result.position_error:.3e}, "
+                f"ori_err={result.orientation_error:.3e}"
             )
-            print(
-                f"Final errors - Δq: {q_change:.2e}, "
-                f"max_pos: {max_final_pos:.2e}, max_rot: {max_final_rot:.2e}"
-            )
-
-        # Restore original configuration state
-        self._ik_conf.update(original_config)
-
-        return q
+        return result.q
 
     def fk(
         self,

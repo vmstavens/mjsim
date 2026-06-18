@@ -11,7 +11,6 @@ from mjsim.utils.mj import (
     set_state,
 )
 from mjsim.utils.mjs import cable, cloth, empty_scene, pipe, replicate
-from mjsim.utils.ompl import qplan, xplan
 
 __all__ = [
     "ObjType",
@@ -30,3 +29,11 @@ __all__ = [
     "qplan",
     "xplan",
 ]
+
+
+def __getattr__(name: str):
+    if name in {"qplan", "xplan"}:
+        from mjsim.utils.ompl import qplan, xplan
+
+        return {"qplan": qplan, "xplan": xplan}[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
