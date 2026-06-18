@@ -34,6 +34,7 @@ if TYPE_CHECKING:
         RobotInfo,
         add_act_freejoint,
         apply_wrench,
+        curve_dlo,
         does_exist,
         get_bodies_in_contact,
         get_contact_states,
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
         set_joint_q,
         set_pose,
         set_state,
+        update_dlo_ref,
     )
     from mjsim.utils.mjs import (  # noqa: F401
         cable,
@@ -122,6 +124,8 @@ _MJ_HELPER_EXPORTS = [
     "is_robot_entity",
     "jnt2act",
     "add_act_freejoint",
+    "curve_dlo",
+    "update_dlo_ref",
 ]
 _MJCF_EXPORTS = [
     "empty_scene",

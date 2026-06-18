@@ -28,6 +28,7 @@ def test_root_exports_public_convenience_api() -> None:
         "ObjType",
         "RobotInfo",
         "ContactState",
+        "curve_dlo",
         "empty_scene",
         "cable",
         "cloth",
@@ -39,6 +40,7 @@ def test_root_exports_public_convenience_api() -> None:
         "name2id",
         "id2name",
         "get_contact_states",
+        "update_dlo_ref",
         "qplan",
         "xplan",
     }
