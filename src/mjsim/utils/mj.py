@@ -6,10 +6,12 @@ from typing import List, Optional, Tuple, Union
 
 import mujoco as mj
 import numpy as np
-from numpy.typing import ArrayLike
 import spatialmath as sm
 import spatialmath.base as smb
+from mujoco import mjx
+from numpy.typing import ArrayLike
 
+from mjsim.utils.math import rotvec_to_quat
 from mjsim.utils.sm import make_tf
 
 
@@ -2133,3 +2135,79 @@ def add_act_freejoint(
         forcerange=[-10, 10],
     ).set_to_position(kp=kp_ori, kv=kv_ori)
     return spec
+
+
+def curve_dlo(
+    data: mj.MjData | mjx.Data,
+    model: mj.MjModel | mjx.Model,
+    theta: float,
+    phi: float,
+    *,
+    joint_prefix: str = "cable/",
+    cable_joint_qpos_adrs: np.ndarray | None = None,
+    num_cables: int = 1,
+    forward: bool = True,
+) -> mj.MjData | mjx.Data:
+    """Apply constant pre-curvature to DLO cable ball joints.
+
+    MuJoCo data is mutated in place. MJX data is returned with replaced qpos.
+
+    Args:
+        data: ``mj.MjData`` or ``mjx.Data`` to update.
+        model: Matching ``mj.MjModel`` or ``mjx.Model``.
+        theta: Total cable bend angle in radians.
+        phi: Bend plane azimuth in radians.
+        joint_prefix: MuJoCo joint-name prefix used to find cable ball joints.
+        cable_joint_qpos_adrs: Optional explicit qpos addresses. Use this for
+            MJX models when the model contains non-cable ball joints.
+        num_cables: Number of independent cables represented by the joint list.
+        forward: Run forward dynamics after updating MuJoCo data.
+    """
+    if num_cables <= 0:
+        raise ValueError(f"num_cables must be > 0, got {num_cables}")
+
+    qpos_adrs = (
+        np.asarray(
+            [
+                model.jnt_qposadr[joint_id]
+                for joint_id in range(int(model.njnt))
+                if int(model.jnt_type[joint_id]) == int(mj.mjtJoint.mjJNT_BALL)
+                and (
+                    not isinstance(model, mj.MjModel)
+                    or (
+                        mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id) or ""
+                    ).startswith(joint_prefix)
+                )
+            ],
+            dtype=np.int32,
+        )
+        if cable_joint_qpos_adrs is None
+        else np.atleast_1d(np.asarray(cable_joint_qpos_adrs, dtype=np.int32))
+    )
+
+    num_joints = qpos_adrs.size
+    if num_joints % num_cables != 0:
+        raise ValueError(
+            f"Expected cable joints ({num_joints}) to be divisible by "
+            f"num_cables ({num_cables})."
+        )
+
+    qpos = np.asarray(data.qpos, dtype=np.float64).copy()
+    if num_joints:
+        joint_theta = float(theta) / (num_joints // num_cables)
+        joint_quat = rotvec_to_quat(
+            np.array(
+                [0.0, joint_theta * np.cos(float(phi)), joint_theta * np.sin(float(phi))]
+            )
+        )
+        qpos[qpos_adrs[:, None] + np.arange(4)] = joint_quat
+
+    if isinstance(data, mj.MjData):
+        data.qpos[:] = qpos
+        if forward:
+            if not isinstance(model, mj.MjModel):
+                raise TypeError("MuJoCo data requires an mj.MjModel for mj_forward")
+            mj.mj_forward(model, data)
+        return data
+
+    return data.replace(qpos=qpos.astype(data.qpos.dtype, copy=False))
