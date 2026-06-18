@@ -12,6 +12,18 @@ from pathlib import Path
 from typing import Iterable
 
 
+DEFAULT_STUB_MODULES = (
+    "mujoco",
+    "mujoco.mjx",
+    "ompl",
+    "ompl.base",
+    "ompl.geometric",
+    "open3d",
+)
+
+OPTIONAL_STUB_MODULES = ("mink",)
+
+
 def _project_root() -> Path | None:
     """Try to locate the project root (where pyproject.toml lives)."""
 
@@ -34,22 +46,28 @@ def _add_stub_path(stub_root: Path) -> None:
             sys.path.insert(0, stub_path)
 
 
-def _target_modules() -> Iterable[str]:
-    targets: list[str] = []
-    for pkg in ("mujoco", "mujoco.mjx", "ompl", "ompl.base", "ompl.geometric", "open3d"):
-        if util.find_spec(pkg):
-            targets.append(pkg)
-
-    if util.find_spec("mink"):
-        targets.append("mink")
-
-    # targets = ["mujoco", "mujoco.mjx", "ompl", "open3d", "mink"]
-
-    return targets
+def _is_importable(module: str) -> bool:
+    try:
+        return util.find_spec(module) is not None
+    except ImportError:
+        return False
 
 
 def _available_modules(modules: Iterable[str]) -> list[str]:
-    return [module for module in modules if util.find_spec(module)]
+    return [module for module in modules if _is_importable(module)]
+
+
+def _target_modules() -> Iterable[str]:
+    targets: list[str] = []
+    for pkg in DEFAULT_STUB_MODULES:
+        if _is_importable(pkg):
+            targets.append(pkg)
+
+    for pkg in OPTIONAL_STUB_MODULES:
+        if _is_importable(pkg):
+            targets.append(pkg)
+
+    return targets
 
 
 def _run_stubgen(
@@ -113,11 +131,18 @@ def ensure_stubs() -> None:
 
     stub_root = _stub_root()
     stamp = stub_root / ".stamp"
+
+    targets = list(_target_modules())
     if stamp.exists():
+        existing_targets = set(stamp.read_text().splitlines())
+        missing_targets = [
+            target for target in targets if target not in existing_targets
+        ]
+        if missing_targets and _run_stubgen(stub_root, missing_targets, quiet=True):
+            stamp.write_text("\n".join(targets))
         _add_stub_path(stub_root)
         return
 
-    targets = list(_target_modules())
     if not _run_stubgen(stub_root, targets, quiet=True):
         return
 
