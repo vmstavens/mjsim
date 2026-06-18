@@ -2197,7 +2197,11 @@ def curve_dlo(
         joint_theta = float(theta) / (num_joints // num_cables)
         joint_quat = rotvec_to_quat(
             np.array(
-                [0.0, joint_theta * np.cos(float(phi)), joint_theta * np.sin(float(phi))]
+                [
+                    0.0,
+                    joint_theta * np.cos(float(phi)),
+                    joint_theta * np.sin(float(phi)),
+                ]
             )
         )
         qpos[qpos_adrs[:, None] + np.arange(4)] = joint_quat
