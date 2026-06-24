@@ -33,6 +33,10 @@ def custom_mesh_path() -> str:
             lines.append(f"v {x:.6f} {y:.6f} {z:.6f}")
 
     for i in range(major_segments):
+        for j in range(minor_segments):
+            lines.append(f"vt {i / major_segments:.6f} {j / minor_segments:.6f}")
+
+    for i in range(major_segments):
         next_i = (i + 1) % major_segments
         for j in range(minor_segments):
             next_j = (j + 1) % minor_segments
@@ -40,12 +44,13 @@ def custom_mesh_path() -> str:
             b = next_i * minor_segments + j + 1
             c = next_i * minor_segments + next_j + 1
             d = i * minor_segments + next_j + 1
-            lines.append(f"f {a} {b} {c}")
-            lines.append(f"f {a} {c} {d}")
+            lines.append(f"f {a}/{a} {b}/{b} {c}/{c}")
+            lines.append(f"f {a}/{a} {c}/{c} {d}/{d}")
 
     path = Path(gettempdir()) / "mjsim_make_flex_custom_mesh.obj"
     path.write_text("\n".join([*lines, ""]), encoding="utf-8")
     return str(path)
+
 
 
 class Sim:
@@ -105,6 +110,7 @@ class Sim:
             rgba=[0.18, 0.18, 0.22, 1.0],
             friction=[1.0, 0.005, 0.0001],
         )
+
 
         pusher = spec.worldbody.add_body(
             name="pusher",
@@ -192,10 +198,11 @@ class Sim:
             mass=0.18,
             equality=1,
         )
-        mesh.rgba = [0.88, 0.20, 0.74, 0.80]
+
+        mesh.rgba = [0.988235294, 0.058823529, 0.752941176, 1.0]
         mesh.young = 12_000.0
         mesh.poisson = 0.2
-        mesh.damping = 0.05
+        mesh.damping = 0.5
         mesh.thickness = 0.010
         mesh.elastic2d = 3
         mesh.condim = 3
