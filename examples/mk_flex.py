@@ -71,6 +71,11 @@ class Sim:
             name: self._named_body_ids(f"{name}_") for name in self.flex_names
         }
 
+
+        n_threads: int = 10
+        mj.mju_threadpool(self.d, n_threads)
+
+
     def _build_model(self) -> tuple[mj.MjModel, mj.MjData]:
         spec = mj.MjSpec()
         spec.modelname = "make_flex_demo"
