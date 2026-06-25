@@ -80,6 +80,7 @@ if TYPE_CHECKING:
         pipe,
         pipe_legacy,
         replicate,
+        sponge,
         weld,
     )
     from mjsim.utils.ompl import qplan, xplan  # noqa: F401
@@ -137,6 +138,7 @@ _MJCF_EXPORTS = [
     "mesh",
     "cloth",
     "jello",
+    "sponge",
     "deform_3d",
     "deform_3d_custom",
     "deformable_mesh",

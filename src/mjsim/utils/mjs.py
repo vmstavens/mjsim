@@ -9,6 +9,16 @@ import mujoco as mj
 import numpy as np
 
 
+_SPEC_XML_STRINGS: dict[int, str] = {}
+
+
+def _to_xml_string(self) -> str:
+    xml_string = _SPEC_XML_STRINGS.get(id(self), getattr(self, "_xml_string", None))
+    if xml_string is not None:
+        return xml_string
+    return self.to_xml()
+
+
 def _spec_from_string(xml_str: str) -> mj.MjSpec:
     """
     Build an MjSpec from XML while keeping the original XML string around.
@@ -19,38 +29,33 @@ def _spec_from_string(xml_str: str) -> mj.MjSpec:
     except Exception:
         # Some MjSpec implementations disallow setting new attributes; ignore in that case.
         pass
-    if not hasattr(spec, "to_xml_string"):
-        try:
-            # Some bindings allow adding attributes to the class even if instances are frozen.
-            def _to_xml_string(self) -> str:
-                if hasattr(self, "_xml_string"):
-                    return self._xml_string
-                return self.to_xml()
+    _SPEC_XML_STRINGS[id(spec)] = xml_str
+    try:
+        # Some bindings allow adding attributes to the class even if instances are frozen.
+        setattr(type(spec), "to_xml_string", _to_xml_string)
+    except Exception:
+        # As a last resort, wrap in a lightweight proxy with the expected method.
+        class _SpecProxy:
+            def __init__(self, inner, xml):
+                self._inner = inner
+                self._xml = xml
 
-            setattr(type(spec), "to_xml_string", _to_xml_string)
-        except Exception:
-            # As a last resort, wrap in a lightweight proxy with the expected method.
-            class _SpecProxy:
-                def __init__(self, inner, xml):
-                    self._inner = inner
-                    self._xml = xml
+            def __getattr__(self, name):
+                return getattr(self._inner, name)
 
-                def __getattr__(self, name):
-                    return getattr(self._inner, name)
+            def to_xml_string(self):
+                return self._xml
 
-                def to_xml_string(self):
-                    return self._xml
-
-            return _SpecProxy(spec, xml_str)
+        return _SpecProxy(spec, xml_str)
     return spec
 
 
 def _ensure_to_xml_string(spec: mj.MjSpec) -> mj.MjSpec:
-    if not hasattr(spec, "to_xml_string"):
-        try:
-            setattr(type(spec), "to_xml_string", lambda self: self.to_xml())
-        except Exception:
-            pass
+    _SPEC_XML_STRINGS.pop(id(spec), None)
+    try:
+        setattr(type(spec), "to_xml_string", _to_xml_string)
+    except Exception:
+        pass
     return spec
 
 
@@ -616,99 +621,67 @@ def _flex_grid_spec(
     thickness: float | None,
     elastic2d: str | int | None,
 ) -> mj.MjSpec:
-    if dim not in (2, 3):
-        msg = f"dim must be 2 or 3, got {dim}"
+    if dim not in (1, 2, 3):
+        msg = f"dim must be 1, 2, or 3, got {dim}"
         raise ValueError(msg)
 
     count_vec = [int(x) for x in count]
     if len(count_vec) != 3:
         msg = f"count must contain 3 integers, got {count}"
         raise ValueError(msg)
-    if dim == 2:
+    if dim == 1:
+        count_vec[1] = 1
+        count_vec[2] = 1
+        if count_vec[0] < 2:
+            msg = f"1D flex objects require at least 2 points, got {count_vec}"
+            raise ValueError(msg)
+    elif dim == 2:
         count_vec[2] = 1
         if count_vec[0] < 2 or count_vec[1] < 2:
             msg = f"2D flex objects require at least 2x2 points, got {count_vec}"
             raise ValueError(msg)
-        points, elements = _grid_points_elements_2d(
-            (count_vec[0], count_vec[1]),
-            (float(spacing[0]), float(spacing[1])),
-        )
     else:
         if any(value < 2 for value in count_vec):
             msg = f"3D flex objects require at least 2x2x2 points, got {count_vec}"
             raise ValueError(msg)
-        points, elements = _grid_points_elements_3d(
-            (count_vec[0], count_vec[1], count_vec[2]),
-            (float(spacing[0]), float(spacing[1]), float(spacing[2])),
-        )
 
-    if not elements:
-        msg = "No flex elements were created"
-        raise ValueError(msg)
+    spacing_vec = _float_list(spacing, 3, (0.1, 0.1, 0.1))
 
     spec = mj.MjSpec()
     spec.modelname = _safe_mj_name(model_name)
     flex_name = _safe_mj_name(name)
+    root = spec.worldbody.add_body(name=f"{flex_name}_root")
+    flex = root.make_flex(
+        name=flex_name,
+        type="grid",
+        dim=dim,
+        count=count_vec,
+        spacing=spacing_vec,
+        radius=float(radius),
+        mass=float(mass),
+        inertiabox=float(inertiabox),
+        equality=int(bool(edge_equality)),
+        flatskin=1 if dim == 3 else 0,
+        elastic2d=_parse_flex_elastic2d(elastic2d) if elastic2d is not None else 0,
+    )
 
-    n_points = points.shape[0]
-    body_mass = mass / n_points
-    body_inertia = body_mass * (2.0 * inertiabox * inertiabox) / 3.0
-    vertbody: list[str] = []
-
-    for i, point in enumerate(points):
-        body = spec.worldbody.add_body(name=f"{flex_name}_{i}", pos=point.tolist())
-        body.ipos = np.array([0.0, 0.0, 0.0])
-        body.mass = body_mass
-        body.inertia = np.array([body_inertia, body_inertia, body_inertia])
-        body.explicitinertial = 1
-
-        for axis_index in range(3):
-            axis = [0.0, 0.0, 0.0]
-            axis[axis_index] = 1.0
-            joint = body.add_joint(
-                type=mj.mjtJoint.mjJNT_SLIDE,
-                pos=[0.0, 0.0, 0.0],
-                axis=axis,
-            )
-            joint.damping = joint_damping
-
-        vertbody.append(body.name)
-
-    flex = spec.add_flex(name=flex_name)
-    flex.dim = dim
-    flex.vert = np.zeros_like(points).reshape(-1).tolist()
-    flex.elem = elements
-    flex.vertbody = vertbody
-    flex.rgba = np.array(rgba, dtype=np.float32)
+    flex.rgba = _float_list(rgba, 4, (0.3, 0.5, 0.8, 0.7))
     flex.radius = float(radius)
 
     if condim is not None:
         flex.condim = int(condim)
     if friction is not None:
-        flex.friction = np.array(
-            _float_list(friction, 3, (0.3, 0.3, 0.3)), dtype=float
-        ).reshape(3, 1)
+        flex.friction = _float_list(friction, 3, (0.3, 0.3, 0.3))
     if solref is not None:
-        flex.solref = np.array(
-            _float_list(solref, 2, (0.02, 1.0)), dtype=float
-        ).reshape(2, 1)
+        flex.solref = _float_list(solref, 2, (0.02, 1.0))
     if solimp is not None:
-        flex.solimp = np.array(
-            _float_list(solimp, 5, (0.95, 0.99, 0.001, 0.5, 2.0)), dtype=float
-        ).reshape(5, 1)
+        flex.solimp = _float_list(solimp, 5, (0.95, 0.99, 0.001, 0.5, 2.0))
     if margin is not None:
         flex.margin = float(margin)
     if gap is not None:
         flex.gap = float(gap)
     if selfcollide is not None:
         flex.selfcollide = _parse_flex_selfcollide(selfcollide)
-
-    for attr in ("edgeequality", "edge_equality"):
-        try:
-            setattr(flex, attr, int(bool(edge_equality)))
-            break
-        except AttributeError:
-            continue
 
     if edge_damping is not None:
         flex.edgedamping = float(edge_damping)
@@ -722,16 +695,8 @@ def _flex_grid_spec(
         flex.poisson = float(poisson)
     if thickness is not None:
         flex.thickness = float(thickness)
-    if elastic2d is not None:
-        flex.elastic2d = _parse_flex_elastic2d(elastic2d)
     if dim == 3:
         flex.flatskin = 1
-
-    spec.add_equality(
-        type=mj.mjtEq.mjEQ_FLEX,
-        objtype=mj.mjtObj.mjOBJ_FLEX,
-        name1=flex_name,
-    )
     return _ensure_to_xml_string(spec)
 
 
@@ -1018,6 +983,7 @@ def deformable_mesh(
     young: float = 10.0,
     poisson: float = 0.1,
     damping: float = 0.001,
+    thickness: float = 0.001,
     elastic2d: str | None = "stretch",
     selfcollide: str = "none",
     internal: bool | str = False,
@@ -1055,6 +1021,9 @@ def deformable_mesh(
         raise ValueError(msg)
     if damping < 0:
         msg = f"damping must be non-negative, got {damping}"
+        raise ValueError(msg)
+    if thickness <= 0:
+        msg = f"thickness must be positive, got {thickness}"
         raise ValueError(msg)
 
     mesh_name = _safe_mj_name(name or model_name or source_path.stem)
@@ -1112,6 +1081,8 @@ def deformable_mesh(
         "poisson": str(poisson),
         "damping": str(damping),
     }
+    if dim == 2:
+        elasticity_attrs["thickness"] = str(thickness)
     if elastic2d is not None:
         elasticity_attrs["elastic2d"] = str(elastic2d)
     ET.SubElement(flexcomp, "elasticity", **elasticity_attrs)
@@ -1143,7 +1114,7 @@ def deformable_mesh(
     return _spec_from_string(xml_str)
 
 
-def dlo(
+def _composite_dlo(
     model_name: str,
     prefix: str,
     curve: str,
@@ -1375,6 +1346,75 @@ def dlo(
     return _spec_from_string(xml_str)
 
 
+def dlo(
+    model_name: str = "rope",
+    prefix: Optional[str] = None,
+    n_segments: int = 10,
+    length: float = 1.0,
+    spacing: Sequence[float] | float | None = None,
+    mass: float = 0.2,
+    radius: float = 0.002,
+    rgba: Sequence[float] = (0.2, 0.2, 0.2, 1.0),
+    condim: int = 3,
+    friction: Sequence[float] | str | None = None,
+    solref: Sequence[float] | str | None = None,
+    solimp: Sequence[float] | str | None = None,
+    selfcollide: str = "none",
+    edge_damping: float = 0.001,
+    edge_stiffness: float | None = None,
+    damping: float | None = None,
+) -> mj.MjSpec:
+    """
+    Create a deformable linear object using MuJoCo's ``make_flex`` grid API.
+
+    This is the make-flex DLO helper. The composite cable plugin remains
+    available through :func:`cable`.
+    """
+    assert n_segments > 1, f"n_segments should be above 1, got {n_segments=}"
+    assert length > 0, f"length should be above 0, got {length=}"
+    assert mass > 0, f"mass should be above 0, got {mass=}"
+    assert radius >= 0, f"radius should be non-negative, got {radius=}"
+
+    prefix = f"{model_name}:" if prefix is None else prefix
+    name = _safe_mj_name(prefix.rstrip(":/"))
+
+    if spacing is None:
+        step = length / max(n_segments - 1, 1)
+        spacing_vec = [step, step, step]
+    elif isinstance(spacing, (int, float)):
+        spacing_vec = [float(spacing)] * 3
+    else:
+        spacing_vec = _float_list(spacing, 3, (length, length, length))
+
+    return _flex_grid_spec(
+        model_name=model_name,
+        name=name,
+        count=(n_segments, 1, 1),
+        spacing=spacing_vec,
+        dim=1,
+        mass=mass,
+        rgba=rgba,
+        radius=radius,
+        joint_damping=0.0,
+        inertiabox=max(radius, 0.001),
+        friction=friction,
+        solref=solref,
+        solimp=solimp,
+        condim=condim,
+        margin=None,
+        gap=None,
+        selfcollide=selfcollide,
+        edge_equality=True,
+        edge_damping=edge_damping,
+        edge_stiffness=edge_stiffness,
+        damping=damping,
+        young=None,
+        poisson=None,
+        thickness=None,
+        elastic2d=None,
+    )
+
+
 def dqo(
     model_name: str,
     prefix: str,
@@ -1389,7 +1429,7 @@ def dqo(
     **kwargs,
 ) -> mj.MjSpec:
     """
-    Create a Deformable Quadratic Object (DQO) model specification using MuJoCo's elasticity plugin.
+    Create a deformable quadratic object using MuJoCo's ``make_flex`` grid API.
 
     This function generates a cloth-like deformable object composed of a grid of segments
     with configurable physical properties including stretch, bend, and shear stiffness.
@@ -1398,14 +1438,10 @@ def dqo(
     - geom_* for geometry attributes (e.g., geom_solimp, geom_margin)
     - joint_* for joint attributes (e.g., joint_stiffness, joint_axis)
 
-    For full information check the documentation:
-    https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-composite
-
     Args:
         model_name: Name of the model.
-        prefix: Prefix for composite elements in the model.
-        count: Number of segments in each dimension as [x_count, y_count, z_count].
-               For cloth, typically use [width_segments, height_segments, 1].
+        prefix: Prefix for generated flex elements in the model.
+        count: Number of points as [x_count, y_count, 1].
         size: Overall size of the DQO (width, height).
         initial: Initial condition specification ("flat", "ball", "none", "free").
         stretch: Stretch stiffness coefficient for the cloth.
@@ -1459,21 +1495,6 @@ def dqo(
         ...     joint_damping="0.1",
         ...     joint_armature="0.0001"
         ... )
-
-        >>> # Create a 3D volumetric deformable object
-        >>> volume_spec = dqo(
-        ...     model_name="jelly",
-        ...     prefix="jelly:",
-        ...     count=[8, 8, 8],
-        ...     size=0.5,
-        ...     initial="free",
-        ...     stretch=50000.0,
-        ...     bend=5000.0,
-        ...     shear=25000.0,
-        ...     segment_size=0.005,
-        ...     segment_geom_type=mj.mjtGeom.mjGEOM_BOX,
-        ...     geom_rgba=[0.8, 0.3, 0.8, 0.6]
-        ... )
     """
     # Separate geom, joint, and flex arguments from kwargs
     geom_args = {}
@@ -1499,18 +1520,17 @@ def dqo(
         f"prefix must be a non-empty string, got {prefix=}"
     )
 
-    # Validate count - for DQO we typically want at least 2D grid
+    # Validate count - DQO is a 2D/quadratic grid. Use dlo() for 1D and dco()
+    # for volumetric 3D objects.
     assert isinstance(count, list) and len(count) == 3, (
         f"count must be a list of 3 integers, got {count=}"
     )
     assert all(isinstance(x, int) and x > 0 for x in count), (
         f"All count values must be positive integers, got {count=}"
     )
-    # For cloth-like objects, at least two dimensions should be > 1
-    dims_greater_than_one = sum(1 for x in count if x > 1)
-    assert dims_greater_than_one >= 1, (
-        f"For DQO, at least one dimension in count should be > 1, got {count=}"
-    )
+    if count[0] < 2 or count[1] < 2 or count[2] != 1:
+        msg = f"DQO requires a 2D count [nx, ny, 1]; use dlo() or dco() for {count=}"
+        raise ValueError(msg)
 
     # Validate numeric parameters
     assert isinstance(size, (int, float)) and size > 0, (
@@ -1544,13 +1564,16 @@ def dqo(
         f"Invalid geometry type: {geom_type}. Must be one of {valid_geom_types}"
     )
 
-    dim = 3 if count[2] > 1 else 2
+    dim = 2
     spacing = flex_args.pop("spacing", None)
     if spacing is None:
+        x_spacing = size / max(count[0] - 1, 1)
+        y_spacing = size / max(count[1] - 1, 1)
+        z_spacing = min(x_spacing, y_spacing)
         spacing = [
-            size / max(count[0] - 1, 1),
-            size / max(count[1] - 1, 1),
-            size / max(count[2] - 1, 1) if dim == 3 else 0.0,
+            x_spacing,
+            y_spacing,
+            z_spacing,
         ]
     else:
         spacing = _float_list(spacing, 3, (size, size, size))
@@ -1594,11 +1617,11 @@ def dqo(
 
 def dco(**kwargs) -> mj.MjSpec:
     """
-    Convenience alias for a cable-like deformable object.
+    Convenience alias for a cubic/volumetric deformable object.
 
-    Any keyword arguments are forwarded to :func:`cable`.
+    Any keyword arguments are forwarded to :func:`jello`.
     """
-    return cable(**kwargs)
+    return jello(**kwargs)
 
 
 def dmo(**kwargs) -> mj.MjSpec:
@@ -1683,7 +1706,7 @@ def cable(
     segment_mass = mass / n_segments
     prefix = f"{model_name}:" if prefix is None else prefix
 
-    return dlo(
+    return _composite_dlo(
         model_name=model_name,
         prefix=prefix,
         curve=curve,
@@ -1716,7 +1739,7 @@ def cloth(
     **kwargs,
 ) -> mj.MjSpec:
     """
-    Create a cloth model using MuJoCo's grid flexcomp compiler.
+    Create a cloth model using MuJoCo's ``MjsBody.make_flex`` grid API.
     """
     # Input validation
     assert width_segments > 0, (
@@ -1746,61 +1769,65 @@ def cloth(
     spacing = _float_list(spacing, 3, (0.05, 0.05, 0.05))
 
     radius = float(kwargs.pop("radius", 0.001))
-    edge_equality = "true" if kwargs.pop("edge_equality", True) else "false"
+    edge_equality = bool(kwargs.pop("edge_equality", True))
     edge_damping = float(kwargs.pop("edge_damping", 0.01))
-    edge_solref = " ".join(
-        str(x)
-        for x in _float_list(kwargs.pop("edge_solref", "0.00001 1"), 2, (1e-5, 1))
-    )
     young = float(kwargs.pop("young", max(stretch, shear)))
     poisson = float(kwargs.pop("poisson", 0.1))
     elastic2d = kwargs.pop("elastic2d", "none")
+    rgba = kwargs.pop("rgba", kwargs.pop("geom_rgba", (0.3, 0.5, 0.8, 0.7)))
+    friction = kwargs.pop("friction", kwargs.pop("geom_friction", None))
+    solref = kwargs.pop("solref", kwargs.pop("geom_solref", None))
+    solimp = kwargs.pop("solimp", kwargs.pop("geom_solimp", None))
+    condim = kwargs.pop("condim", kwargs.pop("geom_condim", None))
+    selfcollide = kwargs.pop("selfcollide", "none")
+    damping = kwargs.pop("damping", None)
+    inertiabox = kwargs.pop("inertiabox", max(radius, 0.001))
+    margin = kwargs.pop("margin", None)
+    gap = kwargs.pop("gap", None)
+
+    # Accepted by the old XML flexcomp path, but make_flex creates the flex
+    # equality directly. Contact/elastic parameters remain configurable above.
+    kwargs.pop("edge_solref", None)
 
     if kwargs:
         print(f"Warning: unused cloth kwargs: {list(kwargs.keys())}")
 
-    mujoco = ET.Element("mujoco", model=model_name)
-    worldbody = ET.SubElement(mujoco, "worldbody")
-    body = ET.SubElement(worldbody, "body", name=f"{cloth_name}_pin", pos="0 0 0")
-    flexcomp = ET.SubElement(
-        body,
-        "flexcomp",
-        type="grid",
-        count=f"{width_segments} {height_segments} 1",
-        spacing=" ".join(str(x) for x in spacing),
-        mass=str(mass),
+    spec = _flex_grid_spec(
+        model_name=model_name,
         name=cloth_name,
-        radius=str(radius),
-    )
-    ET.SubElement(
-        flexcomp,
-        "edge",
-        equality=edge_equality,
-        damping=str(edge_damping),
-        solref=edge_solref,
-    )
-    ET.SubElement(
-        flexcomp,
-        "elasticity",
-        poisson=str(poisson),
-        thickness=str(thickness),
-        young=str(young),
-        elastic2d=str(elastic2d),
+        count=(width_segments, height_segments, 1),
+        spacing=spacing,
+        dim=2,
+        mass=mass,
+        rgba=rgba,
+        radius=radius,
+        joint_damping=0.0,
+        inertiabox=float(inertiabox),
+        friction=friction,
+        solref=solref,
+        solimp=solimp,
+        condim=None if condim is None else int(condim),
+        margin=margin,
+        gap=gap,
+        selfcollide=selfcollide,
+        edge_equality=edge_equality,
+        edge_damping=edge_damping,
+        edge_stiffness=None,
+        damping=damping,
+        young=young,
+        poisson=poisson,
+        thickness=thickness,
+        elastic2d=elastic2d,
     )
 
     if pin_corner:
-        equality = ET.SubElement(mujoco, "equality")
-        ET.SubElement(equality, "connect", body1=f"{cloth_name}_0", anchor="0 0 0")
-
-    try:
-        ET.indent(mujoco)
-        xml_str = ET.tostring(mujoco, encoding="unicode", method="xml")
-    except AttributeError:
-        xml_str = minidom.parseString(
-            ET.tostring(mujoco, encoding="unicode")
-        ).toprettyxml(indent="  ")
-
-    return _spec_from_string(xml_str)
+        spec.add_equality(
+            type=mj.mjtEq.mjEQ_CONNECT,
+            objtype=mj.mjtObj.mjOBJ_BODY,
+            name1=f"{cloth_name}_0",
+            data=[0.0] * 11,
+        )
+    return spec
 
 
 def jello(
@@ -1820,7 +1847,7 @@ def jello(
     poisson: float = 0.2,
 ) -> mj.MjSpec:
     """
-    Create a 3D jello-like deformable object using MuJoCo's grid flexcomp compiler.
+    Create a 3D jello-like deformable object using MuJoCo's ``make_flex`` API.
     """
     count_vec = [int(x) for x in count]
     if len(count_vec) != 3:
@@ -1839,45 +1866,42 @@ def jello(
     prefix = f"{model_name}:" if prefix is None else prefix
     jello_name = _safe_mj_name(prefix.rstrip(":/"))
 
-    mujoco = ET.Element("mujoco", model=model_name)
-    worldbody = ET.SubElement(mujoco, "worldbody")
-    flexcomp = ET.SubElement(
-        worldbody,
-        "flexcomp",
-        type="grid",
-        count=" ".join(str(x) for x in count_vec),
-        spacing=" ".join(str(x) for x in spacing_vec),
-        mass=str(mass),
+    return _flex_grid_spec(
+        model_name=model_name,
         name=jello_name,
-        radius=str(radius),
-        rgba=" ".join(str(x) for x in _float_list(rgba, 4, (0.0, 0.7, 0.7, 1.0))),
-        dim="3",
-    )
-    ET.SubElement(
-        flexcomp,
-        "contact",
-        condim=str(condim),
-        solref=" ".join(str(x) for x in _float_list(solref, 2, (0.01, 1.0))),
-        solimp=" ".join(str(x) for x in _float_list(solimp, 3, (0.95, 0.99, 0.0001))),
-        selfcollide=str(selfcollide),
-    )
-    ET.SubElement(
-        flexcomp,
-        "elasticity",
-        young=str(young),
-        damping=str(damping),
-        poisson=str(poisson),
+        count=count_vec,
+        spacing=spacing_vec,
+        dim=3,
+        mass=mass,
+        rgba=rgba,
+        radius=radius,
+        joint_damping=0.0,
+        inertiabox=max(radius, 0.005),
+        friction=None,
+        solref=solref,
+        solimp=solimp,
+        condim=condim,
+        margin=None,
+        gap=None,
+        selfcollide=selfcollide,
+        edge_equality=True,
+        edge_damping=None,
+        edge_stiffness=None,
+        damping=damping,
+        young=young,
+        poisson=poisson,
+        thickness=None,
+        elastic2d=None,
     )
 
-    try:
-        ET.indent(mujoco)
-        xml_str = ET.tostring(mujoco, encoding="unicode", method="xml")
-    except AttributeError:
-        xml_str = minidom.parseString(
-            ET.tostring(mujoco, encoding="unicode")
-        ).toprettyxml(indent="  ")
 
-    return _spec_from_string(xml_str)
+def sponge(**kwargs) -> mj.MjSpec:
+    """
+    Convenience alias for a volumetric jello-like deformable object.
+
+    Any keyword arguments are forwarded to :func:`jello`.
+    """
+    return jello(**kwargs)
 
 
 def deform_3d(
@@ -1894,18 +1918,15 @@ def deform_3d(
     Create a small volumetric deformable block.
     """
     prefix = f"{model_name}:" if prefix is None else prefix
-    return dqo(
+    spacing = size / max(resolution - 1, 1)
+    return dco(
         model_name=model_name,
         prefix=prefix,
-        count=[resolution, resolution, resolution],
-        size=size,
-        initial="free",
-        stretch=stiffness,
-        bend=bend,
-        shear=shear,
-        segment_size=size / (resolution * 2),
-        segment_geom_type=mj.mjtGeom.mjGEOM_BOX,
+        count=(resolution, resolution, resolution),
+        spacing=(spacing, spacing, spacing),
         mass=mass,
+        radius=size / (resolution * 2),
+        young=stiffness,
     )
 
 
@@ -1918,19 +1939,17 @@ def deform_3d_custom(
     **kwargs,
 ) -> mj.MjSpec:
     """
-    Flexible helper that forwards directly to :func:`dqo`.
+    Flexible helper that forwards to the volumetric :func:`dco` helper.
     """
-    return dqo(
+    radius = kwargs.pop("segment_size", size / max(count))
+    spacing = kwargs.pop("spacing", size / max(max(count) - 1, 1))
+    return dco(
         model_name=kwargs.pop("model_name", "custom_flex"),
         prefix=kwargs.pop("prefix", "flex:"),
-        count=count,
-        size=size,
-        initial=kwargs.pop("initial", "free"),
-        stretch=stretch,
-        bend=bend,
-        shear=shear,
-        segment_size=kwargs.pop("segment_size", size / max(count)),
-        segment_geom_type=kwargs.pop("segment_geom_type", mj.mjtGeom.mjGEOM_BOX),
+        count=tuple(count),
+        spacing=spacing,
+        radius=radius,
+        young=stretch,
         **kwargs,
     )
 

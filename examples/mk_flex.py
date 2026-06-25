@@ -8,6 +8,8 @@ import mujoco as mj
 import mujoco.viewer
 import numpy as np
 
+from mjsim.utils.mjs import cable, cloth, dlo, empty_scene, sponge
+
 
 def custom_mesh_path() -> str:
     """Write a low-poly non-convex torus OBJ for the mesh flex example."""
@@ -54,11 +56,12 @@ def custom_mesh_path() -> str:
 
 
 class Sim:
-    """Small MuJoCo 3.10 ``make_flex`` catalogue with a passive viewer."""
+    """Small deformable-object catalogue with a passive MuJoCo viewer."""
 
     def __init__(self) -> None:
         self.pusher_start = np.array([0.22, -0.36, 0.18])
         self.pusher_end = np.array([0.22, -0.05, 0.18])
+        self.pusher_travel = float(self.pusher_end[1] - self.pusher_start[1])
         self.settle_time = 0.5
         self.push_period = 3.0
         self.flex_names = ["rope_1d", "cloth_2d", "soft_cube_3d", "custom_mesh"]
@@ -66,31 +69,32 @@ class Sim:
         self.m, self.d = self._build_model()
         mj.mj_forward(self.m, self.d)
 
-        self.mocap_id = int(self.m.body_mocapid[self.m.body("pusher").id])
+        self.pusher_actuator_id = self.m.actuator("pusher_position").id
         self.flex_body_ids = {
             name: self._named_body_ids(f"{name}_") for name in self.flex_names
         }
-
+        self.composite_cable_body_ids = self._body_ids_with_prefix(
+            "composite_cable:B"
+        )
 
         n_threads: int = 10
         mj.mju_threadpool(self.d, n_threads)
 
-
     def _build_model(self) -> tuple[mj.MjModel, mj.MjData]:
-        spec = mj.MjSpec()
-        spec.modelname = "make_flex_demo"
+        spec = empty_scene(
+            sim_name="make_flex_demo",
+            add_assets=False,
+            add_floor=False,
+            memory="100M",
+            solver="CG",
+            integrator="implicitfast",
+            timestep=0.0005,
+            tolerance=1e-8,
+            iterations=200,
+            statistic_center=[0.0, 0.0, 0.20],
+            statistic_extent=0.80,
+        )
         spec.memory = 100 * 1024 * 1024
-
-        spec.compiler.autolimits = True
-        spec.option.timestep = 0.0005
-        spec.option.integrator = mj.mjtIntegrator.mjINT_IMPLICITFAST
-        spec.option.solver = mj.mjtSolver.mjSOL_CG
-        spec.option.iterations = 200
-        spec.option.tolerance = 1e-8
-        spec.option.gravity = [0.0, 0.0, -9.82]
-
-        spec.stat.center = [0.0, 0.0, 0.20]
-        spec.stat.extent = 0.80
         spec.visual.global_.azimuth = 115
         spec.visual.global_.elevation = -20
 
@@ -116,11 +120,16 @@ class Sim:
             friction=[1.0, 0.005, 0.0001],
         )
 
-
         pusher = spec.worldbody.add_body(
             name="pusher",
-            mocap=True,
             pos=self.pusher_start.tolist(),
+        )
+        pusher.add_joint(
+            name="pusher_slide",
+            type=mj.mjtJoint.mjJNT_SLIDE,
+            axis=[0.0, 1.0, 0.0],
+            range=[0.0, self.pusher_travel],
+            damping=12.0,
         )
         pusher.add_geom(
             name="pusher_geom",
@@ -129,67 +138,99 @@ class Sim:
             rgba=[0.95, 0.25, 0.12, 1.0],
             friction=[1.0, 0.005, 0.0001],
         )
+        spec.add_actuator(
+            name="pusher_position",
+            target="pusher_slide",
+            trntype=mj.mjtTrn.mjTRN_JOINT,
+            ctrlrange=[0.0, self.pusher_travel],
+            forcerange=[-80.0, 80.0],
+        ).set_to_position(kp=350.0, kv=35.0)
 
-        rope_root = spec.worldbody.add_body(name="rope_1d_root")
-        rope = rope_root.make_flex(
-            name="rope_1d",
-            type="grid",
-            dim=1,
-            count=[11, 1, 1],
-            spacing=[0.035, 0.035, 0.035],
-            pos=[-0.38, -0.22, 0.42],
-            radius=0.006,
+        rope = dlo(
+            model_name="rope_1d",
+            prefix="rope_1d:",
+            n_segments=11,
+            length=0.35,
             mass=0.08,
-            equality=1,
-        )
-        rope.rgba = [0.98, 0.58, 0.12, 1.0]
-        rope.edgedamping = 0.01
-        rope.edgestiffness = 25.0
-        rope.condim = 3
-
-        cloth_root = spec.worldbody.add_body(name="cloth_2d_root")
-        cloth = cloth_root.make_flex(
-            name="cloth_2d",
-            type="grid",
-            dim=2,
-            count=[8, 8, 1],
-            spacing=[0.035, 0.035, 0.035],
-            pos=[-0.35, 0.24, 0.38],
             radius=0.006,
-            mass=0.28,
-            equality=1,
+            edge_damping=0.01,
+            edge_stiffness=25.0,
+            rgba=[0.98, 0.58, 0.12, 1.0],
+            condim=3,
         )
-        cloth.rgba = [0.18, 0.78, 0.35, 0.82]
-        cloth.young = 800.0
-        cloth.poisson = 0.2
-        cloth.damping = 0.1
-        cloth.thickness = 0.006
-        cloth.elastic2d = 3
-        cloth.condim = 3
-        cloth.friction = [0.6, 0.005, 0.0001]
-        cloth.solref = [0.0001, 0.1]
-        cloth.solimp = [0.90, 0.95, 0.001, 0.5, 2.0]
-        cloth.selfcollide = mj.mjtFlexSelf.mjFLEXSELF_NONE
+        spec.attach(
+            rope,
+            prefix="",
+            frame=spec.worldbody.add_frame(pos=[-0.38, -0.22, 0.42]),
+        )
 
-        cube_root = spec.worldbody.add_body(name="soft_cube_3d_root")
-        cube = cube_root.make_flex(
-            name="soft_cube_3d",
-            type="grid",
-            dim=3,
+        composite_cable = cable(
+            model_name="composite_cable",
+            prefix="composite_cable:",
+            curve="0 s 0",
+            n_segments=11,
+            length=0.35,
+            mass=0.08,
+            segment_size=0.006,
+            geom_rgba=[0.72, 0.72, 0.78, 1.0],
+            geom_condim=3,
+        )
+        spec.attach(
+            composite_cable,
+            prefix="",
+            frame=spec.worldbody.add_frame(pos=[-0.62, -0.22, 0.42]),
+        )
+
+        sheet = cloth(
+            model_name="cloth_2d",
+            prefix="cloth_2d:",
+            width_segments=8,
+            height_segments=8,
+            width=0.245,
+            height=0.245,
+            spacing=[0.035, 0.035, 0.035],
+            mass=0.28,
+            radius=0.006,
+            pin_corner=False,
+            rgba=[0.18, 0.78, 0.35, 0.82],
+            young=800.0,
+            poisson=0.2,
+            damping=0.1,
+            thickness=0.006,
+            elastic2d="both",
+            condim=3,
+            friction=[0.6, 0.005, 0.0001],
+            solref=[0.0001, 0.1],
+            solimp=[0.90, 0.95, 0.001, 0.5, 2.0],
+            selfcollide="none",
+        )
+        spec.attach(
+            sheet,
+            prefix="",
+            frame=spec.worldbody.add_frame(pos=[-0.35, 0.24, 0.38]),
+        )
+
+        cube = sponge(
+            model_name="soft_cube_3d",
+            prefix="soft_cube_3d:",
             count=[6, 6, 6],
             spacing=[0.035, 0.035, 0.035],
-            pos=[0.22, -0.13, 0.18],
-            radius=0.006,
             mass=0.35,
-            equality=1,
+            radius=0.006,
+            rgba=[0.05, 0.65, 0.95, 0.75],
+            young=5_000.0,
+            poisson=0.25,
+            damping=0.002,
+            condim=3,
+            solref=None,
+            solimp=None,
+            selfcollide="none",
         )
-        cube.rgba = [0.05, 0.65, 0.95, 0.75]
-        cube.young = 5_000.0
-        cube.poisson = 0.25
-        cube.damping = 0.002
-        cube.condim = 3
-        cube.selfcollide = mj.mjtFlexSelf.mjFLEXSELF_NONE
-        cube.flatskin = 1
+        spec.attach(
+            cube,
+            prefix="",
+            frame=spec.worldbody.add_frame(pos=[0.22, -0.13, 0.18]),
+        )
 
         mesh_root = spec.worldbody.add_body(name="custom_mesh_root")
         mesh = mesh_root.make_flex(
@@ -220,11 +261,21 @@ class Sim:
         return model, data
 
     def _named_body_ids(self, prefix: str) -> list[int]:
+        return self._body_ids_with_prefix(prefix, numeric_suffix=True)
+
+    def _body_ids_with_prefix(
+        self,
+        prefix: str,
+        *,
+        numeric_suffix: bool = False,
+    ) -> list[int]:
         body_ids: list[int] = []
         for body_id in range(1, self.m.nbody):
             name = mj.mj_id2name(self.m, mj.mjtObj.mjOBJ_BODY, body_id)
             suffix = name.removeprefix(prefix) if name else ""
-            if name and name.startswith(prefix) and suffix.isdigit():
+            if name and name.startswith(prefix) and (
+                not numeric_suffix or suffix.isdigit()
+            ):
                 body_ids.append(body_id)
         return body_ids
 
@@ -235,9 +286,7 @@ class Sim:
             phase = (self.d.time - self.settle_time) / self.push_period
             alpha = 0.5 * (1.0 - np.cos(2.0 * np.pi * phase))
 
-        self.d.mocap_pos[self.mocap_id] = (
-            (1.0 - alpha) * self.pusher_start + alpha * self.pusher_end
-        )
+        self.d.ctrl[self.pusher_actuator_id] = alpha * self.pusher_travel
 
     def step(self) -> None:
         self._update_pusher()
@@ -264,11 +313,18 @@ class Sim:
                 f"{name} center [m]: "
                 f"({center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f})"
             )
+        if self.composite_cable_body_ids:
+            center = np.mean(self.d.xpos[self.composite_cable_body_ids], axis=0)
+            print(
+                "composite_cable center [m]: "
+                f"({center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f})"
+            )
 
     def run_viewer(self) -> None:
         print("MuJoCo 3.10 MjsBody.make_flex creates 1D, 2D, 3D, and mesh flexes.")
         print(
-            "A mocap pusher periodically squeezes the 3D cube into the wall. "
+            "The gray cable uses the composite cable plugin for comparison. "
+            "A force-limited slider pusher periodically presses the 3D cube. "
             "The cloth uses softer contact and extra damping to reduce jitter. "
             "Close the viewer to exit."
         )

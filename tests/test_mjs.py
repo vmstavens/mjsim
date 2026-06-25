@@ -29,7 +29,12 @@ def test_cable_xml_roundtrip():
 def test_flex_deformables_compile_and_export_xml():
     mj = pytest.importorskip("mujoco")
 
-    from mjsim.utils.mjs import cloth, deform_3d_custom, jello
+    from mjsim.utils.mjs import cloth, dco, deform_3d_custom, dlo, jello, sponge
+
+    rope_spec = dlo(n_segments=4, length=0.3)
+    rope_model = rope_spec.compile()
+    assert rope_model.nflex == 1
+    assert rope_model.flex_dim[0] == 1
 
     cloth_spec = cloth(width_segments=4, height_segments=4)
     cloth_model = cloth_spec.compile()
@@ -56,6 +61,16 @@ def test_flex_deformables_compile_and_export_xml():
     assert jello_model.nflex == 1
     assert jello_model.flex_dim[0] == 3
     assert "<flex" in jello_spec.to_xml_string()
+
+    sponge_spec = sponge(count=(2, 2, 2))
+    sponge_model = sponge_spec.compile()
+    assert sponge_model.nflex == 1
+    assert sponge_model.flex_dim[0] == 3
+
+    dco_spec = dco(count=(2, 2, 2))
+    dco_model = dco_spec.compile()
+    assert dco_model.nflex == 1
+    assert dco_model.flex_dim[0] == 3
 
 
 def test_empty_scene_uses_spec_options():
@@ -180,7 +195,7 @@ def test_mesh_helper_warns_when_mesh_looks_like_millimeters(tmp_path, capsys):
 
 
 def test_deformable_mesh_helper_compiles_and_attaches(tmp_path):
-    pytest.importorskip("mujoco")
+    mj = pytest.importorskip("mujoco")
     o3d = pytest.importorskip("open3d")
 
     from mjsim.utils.mjs import deformable_mesh, empty_scene
