@@ -1212,10 +1212,12 @@ def apply_wrench(
         )
 
     # Get the body ID
-    try:
-        target_id = name2id(model, body_name, ObjType.BODY)
-    except Exception:
-        raise ValueError(f"The body name '{body_name}' does not exist in the model.")
+    target_id = mj.mj_name2id(model, ObjType.BODY.value, body_name)
+    if target_id == -1:
+        raise ValueError(
+            f"Body '{body_name}' was not found in the model. "
+            f"Available body names: {get_names(model, ObjType.BODY)}"
+        )
 
     # Apply the wrench to the specified body
     data.xfrc_applied[target_id, :] = wrench

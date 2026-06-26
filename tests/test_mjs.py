@@ -114,6 +114,33 @@ def test_empty_scene_uses_spec_options():
     assert 'texture="groundplane"' in spec.to_xml_string()
 
 
+def test_apply_wrench_reports_available_body_names():
+    mj = pytest.importorskip("mujoco")
+
+    from mjsim.utils.mj import apply_wrench
+
+    model = mj.MjModel.from_xml_string(
+        """
+        <mujoco>
+          <worldbody>
+            <body name="box_body">
+              <geom type="box" size="0.1 0.1 0.1"/>
+            </body>
+          </worldbody>
+        </mujoco>
+        """
+    )
+    data = mj.MjData(model)
+
+    with pytest.raises(ValueError) as exc_info:
+        apply_wrench(data, model, "missing_body", [0, 0, 1, 0, 0, 0])
+
+    message = str(exc_info.value)
+    assert "Body 'missing_body' was not found in the model." in message
+    assert "Available body names:" in message
+    assert "box_body" in message
+
+
 def test_mesh_helper_writes_collision_cache_and_compiles(tmp_path):
     pytest.importorskip("mujoco")
     pytest.importorskip("open3d")
