@@ -11,11 +11,11 @@ requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "Victor M. Staven" }]
 dependencies = [
-    "cython>=3.2.0",
+    # "cython>=3.2.0",
     "mink>=0.0.13",
     "mjviser>=0.0.14",
     "mujoco>=3.3.7",
-    "mujoco-mjx>=3.8.1",
+    # "mujoco-mjx>=3.8.1",
     "numpy>=2.3.0",
     "ompl>=2.0.0",
     "open3d>=0.19.0",
