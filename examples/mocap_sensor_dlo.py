@@ -1,15 +1,22 @@
-import numpy as np
+import time
+
 import mujoco as mj
 import mujoco.viewer
+import numpy as np
+from mocap_rod_wall_force_plot import weld_sensor
 
 from mjsim.utils.mjs import cable, empty_scene
-
 
 CABLE_MODEL_NAME = "dlo"
 CABLE_ATTACH_PREFIX = "cable/"
 CABLE_NAME_PREFIX = f"{CABLE_ATTACH_PREFIX}{CABLE_MODEL_NAME}:"
 CABLE_TIP_SITE = f"{CABLE_NAME_PREFIX}S_last"
 CABLE_BODY_PREFIX = f"{CABLE_NAME_PREFIX}B"
+TIP_WELD_NAME = "tip_weld"
+MOCAP_WELD_SITE = "mocap_site"
+FORCE_ARROW_SCALE = 0.5
+FORCE_ARROW_WIDTH = 0.01
+FORCE_ARROW_MIN_LENGTH = 1e-4
 
 
 class Sim:
@@ -17,53 +24,48 @@ class Sim:
         self.m, self.d = self._build_model()
         mj.mj_forward(self.m, self.d)
 
-        self.loadcell_site_id = self.m.site("loadcell_site").id
+        self.mocap_weld_site_id = self.m.site(MOCAP_WELD_SITE).id
         self.cable_tip_site_id = self.m.site(CABLE_TIP_SITE).id
-        self.loadcell_force_adr = self.m.sensor("loadcell_force").adr[0]
-        self.loadcell_torque_adr = self.m.sensor("loadcell_torque").adr[0]
         self.cable_body_ids = self._body_ids_with_prefix(CABLE_BODY_PREFIX)
 
         self.cable_mass = sum(float(self.m.body_mass[i]) for i in self.cable_body_ids)
-        self.loadcell_mass = float(self.m.body("loadcell").mass[0])
-        self.expected_sensor_force_z = (
-            -(self.cable_mass + self.loadcell_mass) * self.m.opt.gravity[2]
-        )
+        self.expected_support_force_z = -self.cable_mass * self.m.opt.gravity[2]
         self.expected_support_moment = self.support_moment_about_cable_com(
-            np.array([0, 0, self.expected_sensor_force_z])
+            np.array([0, 0, self.expected_support_force_z])
         )
         self.step_count = 0
+        self._mocap_site_wrench_zero = np.zeros(6)
+        self._weld_constraint_force_zero = np.zeros(3)
+        self.zero_step_count: int | None = None
 
     def _build_model(self) -> tuple[mj.MjModel, mj.MjData]:
-        """Build a DLO tip-load example with a mocap-mounted load cell.
+        """Build a DLO tip-load example with a mocap-mounted cable.
 
         ``ms.cable`` creates a composite cable: multiple bodies joined together by
         MuJoCo joints and the cable elasticity plugin. The tip site is welded to a
-        small fixed child body called ``loadcell`` under the mocap body:
+        site on the mocap body:
 
-            mocap -> loadcell --weld equality-- cable tip site
+            mocap_site --weld equality-- cable tip site
 
-        A MuJoCo ``mjSENS_FORCE`` sensor on ``loadcell_site`` measures the
-        parent-child interaction force between ``loadcell`` and ``mocap``. Since
-        the cable tip is welded to ``loadcell``, this is the mount/load-cell force.
-        The loadcell site is rotated to match the cable endpoint site frame; if the
-        welded site frames start with different orientations, the weld will create
-        an artificial torque preload.
+        The site is rotated to match the cable endpoint frame; if the welded site
+        frames start with different orientations, the weld will create an
+        artificial torque preload. ``weld_sensor`` is called with this explicit
+        site name to read the matching force/torque sensors.
 
         The cable is initialized vertically below the mount using ``curve="0 0 s"``
         and an attach frame at z=0.5, so the last site starts at z=1.5 and is welded
         to the mocap site. At static equilibrium, the vertical force should be:
 
-            Fz = (m_cable + m_loadcell) * g
+            Fz = m_cable * g
 
-        The loadcell mass is set to 1e-6 kg, so this is effectively the cable
-        weight. With the current cable settings, the compiled cable mass is about
-        0.18 kg, so expect:
+        With the current cable settings, the compiled cable mass is about 0.18 kg,
+        so expect:
 
             Fz ~= 0.18 kg * 9.82 m/s^2 = 1.77 N
 
         The moment caused by this support force about the cable center of mass is:
 
-            r = loadcell_site_position - cable_com
+            r = mocap_weld_site_position - cable_com
             tau_com = r x F
 
         In this vertical setup, ``r`` and ``F`` are nearly collinear, so
@@ -72,7 +74,9 @@ class Sim:
         """
         scene = empty_scene(memory="100M")
 
-        m_body = scene.worldbody.add_body(name="mocap", mocap=True, pos=[0, 0, 1.5])
+        m_body = scene.worldbody.add_body(
+            name="mocap", mocap=True, pos=[0, 0, 1.5], euler=[0, np.pi / 2, 0]
+        )
         m_body.add_geom(
             name="mocap_geom",
             type=mj.mjtGeom.mjGEOM_BOX,
@@ -81,19 +85,8 @@ class Sim:
             conaffinity=0,
             rgba=[1, 0, 0, 1],
         )
-
-        loadcell = m_body.add_body(name="loadcell", pos=[0, 0, 0])
-        loadcell.add_geom(
-            name="loadcell_geom",
-            type=mj.mjtGeom.mjGEOM_SPHERE,
-            size=[0.015],
-            mass=1e-6,
-            contype=0,
-            conaffinity=0,
-            rgba=[0.2, 0.2, 1, 1],
-        )
-        loadcell.add_site(
-            name="loadcell_site",
+        m_body.add_site(
+            name=MOCAP_WELD_SITE,
             pos=[0, 0, 0],
             quat=[0, 0.70710678118, 0, 0.70710678118],
             size=[0.03],
@@ -104,6 +97,8 @@ class Sim:
             model_name=CABLE_MODEL_NAME,
             n_segments=10,
             length=1.0,
+            twist=5 * 60000,
+            bend=5 * 10000000,
             mass=0.2,
             curve="0 0 s",
             segment_size=0.006,
@@ -114,26 +109,25 @@ class Sim:
         scene.attach(dlo, prefix=CABLE_ATTACH_PREFIX, frame=f_cable)
 
         scene.add_equality(
-            name="tip_weld",
+            name=TIP_WELD_NAME,
             type=mj.mjtEq.mjEQ_WELD,
             objtype=mj.mjtObj.mjOBJ_SITE,
-            name1="loadcell_site",
+            name1=MOCAP_WELD_SITE,
             name2=CABLE_TIP_SITE,
-            solref=[0.001, 3],
+            solref=[0.000000000001, 1],
         )
-
         scene.add_sensor(
-            name="loadcell_force",
+            name=f"{TIP_WELD_NAME}_force",
             type=mj.mjtSensor.mjSENS_FORCE,
             objtype=mj.mjtObj.mjOBJ_SITE,
-            objname="loadcell_site",
+            objname=MOCAP_WELD_SITE,
             dim=3,
         )
         scene.add_sensor(
-            name="loadcell_torque",
+            name=f"{TIP_WELD_NAME}_torque",
             type=mj.mjtSensor.mjSENS_TORQUE,
             objtype=mj.mjtObj.mjOBJ_SITE,
-            objname="loadcell_site",
+            objname=MOCAP_WELD_SITE,
             dim=3,
         )
 
@@ -150,44 +144,43 @@ class Sim:
         ]
 
     def cb(self, key: int) -> None:
-        pass
+        if key in (ord("z"), ord("Z")):
+            self.zero()
 
-    def sensor_vector_to_world(self, vector):
-        """Transform a vector from the loadcell site frame to the world frame.
+    def zero(self) -> None:
+        """Use the current force/torque readings as the output zero point."""
+        self._mocap_site_wrench_zero = self._mocap_site_wrench_world_raw()
+        self._weld_constraint_force_zero = self._weld_constraint_force_world_raw()
+        self.zero_step_count = self.step_count
+        print(f"zeroed force readings at step {self.step_count}")
 
-        MuJoCo force and torque site sensors report their values in the sensor site
-        frame. The site frame is aligned with the world frame in this example, but
-        applying the site rotation keeps the helper correct if the mocap body is
-        rotated later:
+    def mocap_site_wrench_world(self):
+        """Return ``[Fx, Fy, Fz, Tx, Ty, Tz]`` from the mocap weld sensor API."""
+        return self._mocap_site_wrench_world_raw() - self._mocap_site_wrench_zero
 
-            v_world = R_site_to_world * v_site
-        """
-        site_rot = self.d.site_xmat[self.loadcell_site_id].reshape(3, 3)
-        return site_rot @ vector
+    def _mocap_site_wrench_world_raw(self):
+        return weld_sensor(self.m, self.d, TIP_WELD_NAME, site_name=MOCAP_WELD_SITE)
 
-    def loadcell_force_site_frame(self):
-        """Return the raw force sensor value in the loadcell site frame.
+    def weld_constraint_force_world(self):
+        """Return the site-site weld constraint force for this direct mocap weld."""
+        return (
+            self._weld_constraint_force_world_raw() - self._weld_constraint_force_zero
+        )
 
-        The sensor measures the parent-child interaction force between
-        ``loadcell`` and ``mocap``. Because the cable tip is welded to the loadcell,
-        this is the support force transmitted through the mount.
-
-        For the vertical hanging cable at rest, expect approximately:
-
-            Fz = (m_cable + m_loadcell) * 9.82 ~= 1.77 N
-        """
-        return self.d.sensordata[self.loadcell_force_adr : self.loadcell_force_adr + 3]
-
-    def loadcell_torque_site_frame(self):
-        """Return the raw torque sensor value in the loadcell site frame.
-
-        This is the torque transmitted through the parent-child mount at the
-        loadcell site. It is not the same thing as ``r x F`` about the cable COM;
-        for that derived moment, use ``support_moment_about_cable_com``.
-        """
-        return self.d.sensordata[
-            self.loadcell_torque_adr : self.loadcell_torque_adr + 3
+    def _weld_constraint_force_world_raw(self):
+        """Return the unzeroed site-site weld constraint force."""
+        eq_id = self.m.equality(TIP_WELD_NAME).id
+        rows = [
+            i
+            for i in range(self.d.nefc)
+            if self.d.efc_type[i] == mj.mjtConstraint.mjCNSTR_EQUALITY
+            and self.d.efc_id[i] == eq_id
         ]
+        if len(rows) != 6:
+            raise RuntimeError(
+                f"Expected 6 constraint rows for weld {TIP_WELD_NAME!r}, got {len(rows)}"
+            )
+        return -self.d.efc_force[rows[:3]].copy()
 
     def cable_com(self):
         """Return the cable center of mass in world coordinates.
@@ -208,10 +201,10 @@ class Sim:
     def support_moment_about_cable_com(self, support_force_world):
         """Compute the support-force moment about the cable COM.
 
-        This is the moment generated by applying the measured support force at the
-        loadcell site and taking moments about the cable COM:
+        This is the moment generated by applying the support force at the mocap
+        weld site and taking moments about the cable COM:
 
-            r = loadcell_site_position - cable_com
+            r = mocap_weld_site_position - cable_com
             tau_com = r x support_force_world
 
         In the default vertical setup, ``r`` is nearly vertical and the support
@@ -220,54 +213,100 @@ class Sim:
 
             |tau_com| ~= d * |support_force|
         """
-        moment_arm = self.d.site_xpos[self.loadcell_site_id] - self.cable_com()
+        moment_arm = self.d.site_xpos[self.mocap_weld_site_id] - self.cable_com()
         return np.cross(moment_arm, support_force_world)
+
+    def draw_sensor_force_arrow(
+        self,
+        scene: mj.MjvScene,
+        sensor_force_world: np.ndarray,
+    ) -> None:
+        """Draw the zeroed sensor force as a dynamic arrow in the viewer scene."""
+        scene.ngeom = 0
+
+        arrow = FORCE_ARROW_SCALE * sensor_force_world
+        length = float(np.linalg.norm(arrow))
+        if length < FORCE_ARROW_MIN_LENGTH:
+            return
+
+        start = self.d.site_xpos[self.mocap_weld_site_id].copy()
+        end = start + arrow
+        geom = scene.geoms[scene.ngeom]
+        mj.mjv_initGeom(
+            geom,
+            mj.mjtGeom.mjGEOM_ARROW,
+            np.zeros(3),
+            np.zeros(3),
+            np.eye(3).reshape(-1),
+            np.array([1.0, 0.1, 0.05, 0.85]),
+        )
+        mj.mjv_connector(
+            geom,
+            mj.mjtGeom.mjGEOM_ARROW,
+            FORCE_ARROW_WIDTH,
+            start,
+            end,
+        )
+        scene.ngeom += 1
 
     def run(self) -> None:
         print(
             "expected at rest: "
             f"compiled cable mass = {self.cable_mass:.4f} kg | "
-            f"loadcell mass = {self.loadcell_mass:.6f} kg | "
-            f"loadcell force z ~= {self.expected_sensor_force_z:.4f} N | "
+            f"cable support force z ~= {self.expected_support_force_z:.4f} N | "
             "support moment about cable COM ~= "
             f"{self.expected_support_moment[0]:.4f}, "
             f"{self.expected_support_moment[1]:.4f}, "
             f"{self.expected_support_moment[2]:.4f} N*m"
+        )
+        print(
+            "API call: "
+            f'wrench = weld_sensor(sim.m, sim.d, "{TIP_WELD_NAME}", '
+            f'site_name="{MOCAP_WELD_SITE}")'
         )
 
         with mujoco.viewer.launch_passive(
             self.m, self.d, key_callback=self.cb
         ) as viewer:
             while viewer.is_running():
+                step_start = time.time()
                 mj.mj_step(self.m, self.d)
                 self.step_count += 1
 
-                if self.step_count % 50 != 0:
-                    viewer.sync()
-                    continue
+                mocap_site_wrench = self.mocap_site_wrench_world()
+                sensor_force_world = mocap_site_wrench[:3]
+                self.draw_sensor_force_arrow(viewer.user_scn, sensor_force_world)
 
-                force_site = self.loadcell_force_site_frame()
-                torque_site = self.loadcell_torque_site_frame()
-                force_world = self.sensor_vector_to_world(force_site)
-                torque_world = self.sensor_vector_to_world(torque_site)
-                support_moment = self.support_moment_about_cable_com(force_world)
+                if self.step_count % 50 == 0:
+                    sensor_torque_world = mocap_site_wrench[3:]
+                    weld_force_world = self.weld_constraint_force_world()
+                    support_moment = self.support_moment_about_cable_com(
+                        weld_force_world
+                    )
 
-                print(
-                    "loadcell force world: "
-                    f"{force_world[0]:.4f}, "
-                    f"{force_world[1]:.4f}, "
-                    f"{force_world[2]:.4f} | "
-                    "loadcell torque world: "
-                    f"{torque_world[0]:.4f}, "
-                    f"{torque_world[1]:.4f}, "
-                    f"{torque_world[2]:.4f} | "
-                    "support moment about cable COM: "
-                    f"{support_moment[0]:.4f}, "
-                    f"{support_moment[1]:.4f}, "
-                    f"{support_moment[2]:.4f}"
-                )
+                    print(
+                        # "weld constraint force world: "
+                        # f"{weld_force_world[0]:.4f}, "
+                        # f"{weld_force_world[1]:.4f}, "
+                        # f"{weld_force_world[2]:.4f} | "
+                        "mocap-site sensor force world: "
+                        f"{sensor_force_world[0]:.4f}, "
+                        f"{sensor_force_world[1]:.4f}, "
+                        f"{sensor_force_world[2]:.4f} | "
+                        "mocap-site sensor torque world: "
+                        f"{sensor_torque_world[0]:.4f}, "
+                        f"{sensor_torque_world[1]:.4f}, "
+                        f"{sensor_torque_world[2]:.4f} | "
+                        # "support moment about cable COM: "
+                        # f"{support_moment[0]:.4f}, "
+                        # f"{support_moment[1]:.4f}, "
+                        # f"{support_moment[2]:.4f}"
+                    )
 
                 viewer.sync()
+                time_until_next_step = self.m.opt.timestep - (time.time() - step_start)
+                if time_until_next_step > 0:
+                    time.sleep(time_until_next_step)
 
 
 if __name__ == "__main__":

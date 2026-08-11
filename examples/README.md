@@ -20,6 +20,7 @@ Most examples open the native MuJoCo viewer. Close the viewer window to exit.
 | `mocap_sensor_api.py` | Box welded through a mocap-mounted load-cell body, using a reusable force/torque sensor helper. Supports `--headless`. |
 | `mocap_sensor_dlo.py` | Hanging deformable cable welded to a mocap-mounted load cell with force and torque readings. |
 | `modelling.py` | Combined scene with a Robotiq gripper, bunny mesh, cable, cloth, jello block, and free ball. |
+| `particle_container.py` | Container filled with damped free-sphere particles that behave like a semi-liquid slurry under a moving paddle. Supports `--headless`. |
 | `robot.py` | UR10e with Robotiq gripper using `mjsim.Robot` wrappers and keyboard callbacks. |
 | `sim.py` | Minimal UR5e and Robotiq gripper scene stepped in a passive MuJoCo viewer. |
 | `test.py` | Local scratch simulation for UR10e, Robotiq gripper, ball, and optional Harting connector mesh if available on disk. |

@@ -1,11 +1,11 @@
 # Admittance Controller Report
 
-This note documents the math and implementation in `admittance_controller.py`.
+This note documents the math and implementation in `admittance_controller_gui.py`.
 The example simulates a UR arm with a load-cell body between the robot wrist and
 a contact flange. A physical mocap pusher contacts the flange, the load-cell
 force and flange torque sensors measure the transmitted wrench, and an
 admittance controller moves a Cartesian target pose that the robot tracks with
-its position actuators.
+inverse-dynamics torques sent to direct motor actuators.
 
 ## Mechanical Model
 
@@ -162,14 +162,20 @@ data.mocap_quat[target_mocap_id] = q_target
 
 ## Cartesian Tracking
 
-The UR description uses position actuators, so the admittance target is tracked
-by updating joint position commands. The controller now tracks both translation
-and orientation.
+The imported UR model is converted from position actuators to direct motor
+actuators. The original UR10e actuator `forcerange` values become both the
+motor control limits and the force limits:
+
+```text
+[330, 330, 150, 56, 56, 56] N m
+```
+
+The controller tracks both translation and orientation.
 
 Let:
 
 ```text
-e = p_target - p_actual
+e_pos = p_target - p_actual
 ```
 
 The orientation error is computed with quaternion algebra:
@@ -185,26 +191,38 @@ The full site Jacobian maps joint velocity to Cartesian twist:
 [v, omega] = J(q) q_dot
 ```
 
-The code computes a damped least-squares joint update from a 6D task error:
+The controller asks for a Cartesian acceleration with critically damped PD
+tracking:
 
 ```text
-e_task = [ik_pos_gain * e_pos, ik_ori_gain * e_rot]
-dq = J^T (J J^T + lambda^2 I)^-1 e_task
+x_ddot_task = Kp [e_pos, e_rot] - Kd [v, omega]
+Kd = tracking_damping_ratio * 2 * sqrt(Kp)
 ```
 
-where `lambda` is `ik_damping`. This is numerically safer than directly
-inverting the Jacobian, especially near singular configurations.
+The task acceleration is mapped to joint acceleration with damped least
+squares:
 
-The joint target is updated and clipped to joint limits:
+```text
+q_ddot_des = J^T (J J^T + lambda^2 I)^-1 x_ddot_task
+```
+
+where `lambda` is `tracking_dls_damping`. MuJoCo inverse dynamics then computes
+the generalized joint torques needed to produce that acceleration at the
+current pose and velocity:
 
 ```python
-q_target += dq
-q_target = clip(q_target, lower_limits, upper_limits)
-ur.set_ctrl(q_target)
+data.qacc[robot_dof_indices] = q_ddot_des
+mj.mj_inverse(model, data)
+raw_torque = data.qfrc_inverse[robot_dof_indices]
 ```
 
-The robot's built-in position actuators then drive the joints toward
-`q_target`.
+Finally, the command is clipped to the motor torque limits and written to the
+UR actuators:
+
+```python
+torque = clip(raw_torque, torque_min, torque_max)
+ur.set_ctrl(torque)
+```
 
 ## Tuning
 
@@ -223,9 +241,11 @@ torque_deadband
 torque_limit
 max_target_offset
 max_target_rotvec
-ik_pos_gain
-ik_ori_gain
-ik_damping
+tracking_pos_gain
+tracking_ori_gain
+tracking_damping_ratio
+tracking_dls_damping
+torque_limit_scale
 force_sign
 torque_sign
 ```
@@ -238,10 +258,12 @@ Useful tuning effects:
 - Increase `admittance_mass` for slower force response.
 - Increase `admittance_rot_stiffness` for less rotation under torque.
 - Increase `admittance_rot_damping` if the target orientation oscillates.
-- Increase `ik_pos_gain` if the actual position lags too far behind the target.
-- Increase `ik_ori_gain` if the actual orientation lags too far behind the target.
-- Decrease either IK gain if the robot motion becomes jumpy.
-- Increase `ik_damping` near singular or unstable configurations.
+- Increase `tracking_pos_gain` if the actual position lags behind the target.
+- Increase `tracking_ori_gain` if the actual orientation lags behind the target.
+- Decrease either tracking gain if the robot motion becomes jumpy.
+- Increase `tracking_damping_ratio` if the robot overshoots the target.
+- Increase `tracking_dls_damping` near singular or unstable configurations.
+- Lower `torque_limit_scale` to demonstrate actuator saturation.
 - Lower `force_limit` if contact spikes move the target too abruptly.
 - Lower `torque_limit` if contact spikes rotate the target too abruptly.
 
@@ -258,6 +280,7 @@ The printout includes:
 - `|T|`: world torque magnitude.
 - `target_offset`: the admittance displacement `x`.
 - `target_rotvec`: the admittance rotation vector `r`.
+- `tau_cmd`: inverse-dynamics motor torque after clipping.
 - `pusher_z`: current pusher mocap height.
 
 The visual markers are:
@@ -268,4 +291,4 @@ The visual markers are:
 When the pusher contacts the flange, force should become nonzero and the magenta
 target should move away from the home pose. If the contact creates torque, the
 magenta target should also rotate. The green actual frame should then track
-toward the magenta target through the UR position actuators.
+toward the magenta target through clipped motor torques.

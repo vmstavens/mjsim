@@ -52,8 +52,13 @@ def add_mocap_weld_sensor(scene, mocap_body, name: str, object_site: str) -> Non
     )
 
 
-def weld_sensor(model: mj.MjModel, data: mj.MjData, name: str) -> np.ndarray:
-    site_id = model.site(f"{name}_loadcell_site").id
+def weld_sensor(
+    model: mj.MjModel,
+    data: mj.MjData,
+    name: str,
+    site_name: str | None = None,
+) -> np.ndarray:
+    site_id = model.site(site_name or f"{name}_loadcell_site").id
     force_adr = model.sensor(f"{name}_force").adr[0]
     torque_adr = model.sensor(f"{name}_torque").adr[0]
 

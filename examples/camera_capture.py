@@ -7,9 +7,9 @@ an OpenCV window.
 
 import cv2
 import glfw
-import mjsim as ms
 import mujoco as mj
 
+import mjsim as ms
 from mjsim.sensors.camera import Camera
 
 
@@ -44,7 +44,7 @@ class Sim(ms.BaseSim):
             euler=[0.0, 0.0, 3.14],
             fovy=45.0,
             targetbody="box",
-            mode=mj.mjtCamLight.mjCAMLIGHT_TARGETBODY
+            mode=mj.mjtCamLight.mjCAMLIGHT_TARGETBODY,
         )
 
         model = scene.compile()
