@@ -1604,7 +1604,7 @@ def dqo(
         margin=flex_args.pop("margin", None),
         gap=flex_args.pop("gap", None),
         selfcollide=flex_args.pop("selfcollide", "none"),
-        edge_equality=bool(flex_args.pop("edge_equality", True)),
+        edge_equality=bool(flex_args.pop("edge_equality", False)),
         edge_damping=flex_args.pop("edge_damping", 0.001),
         edge_stiffness=flex_args.pop("edge_stiffness", None),
         damping=flex_args.pop("damping", None),
@@ -1740,6 +1740,9 @@ def cloth(
 ) -> mj.MjSpec:
     """
     Create a cloth model using MuJoCo's ``MjsBody.make_flex`` grid API.
+
+    Defaults to edge constraints without passive elasticity. For elastic cloth,
+    set ``edge_equality=False`` and ``elastic2d="both"`` (or "bend"/"stretch").
     """
     # Input validation
     assert width_segments > 0, (
@@ -1771,7 +1774,8 @@ def cloth(
     radius = float(kwargs.pop("radius", 0.001))
     edge_equality = bool(kwargs.pop("edge_equality", True))
     edge_damping = float(kwargs.pop("edge_damping", 0.01))
-    young = float(kwargs.pop("young", max(stretch, shear)))
+    # MuJoCo 3.14 disallows combining flex constraints with nonzero young.
+    young = float(kwargs.pop("young", 0.0 if edge_equality else max(stretch, shear)))
     poisson = float(kwargs.pop("poisson", 0.1))
     elastic2d = kwargs.pop("elastic2d", "none")
     rgba = kwargs.pop("rgba", kwargs.pop("geom_rgba", (0.3, 0.5, 0.8, 0.7)))
@@ -1884,7 +1888,7 @@ def jello(
         margin=None,
         gap=None,
         selfcollide=selfcollide,
-        edge_equality=True,
+        edge_equality=False,
         edge_damping=None,
         edge_stiffness=None,
         damping=damping,

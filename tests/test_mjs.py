@@ -40,6 +40,7 @@ def test_flex_deformables_compile_and_export_xml():
     cloth_model = cloth_spec.compile()
     assert cloth_model.nflex == 1
     assert cloth_model.flex_edgeequality[0] == 1
+    assert cloth_spec.flexes[0].young == 0
     assert cloth_model.flex_edgedamping[0] > 0
     assert "<flex" in cloth_spec.to_xml_string()
 
@@ -54,12 +55,16 @@ def test_flex_deformables_compile_and_export_xml():
     )
     block_model = block.compile()
     assert block_model.nflex == 1
+    assert block_model.flex_edgeequality[0] == 0
+    assert block.flexes[0].young == 100.0
     assert "<flex" in block.to_xml_string()
 
     jello_spec = jello(count=(3, 3, 3), spacing=(0.03, 0.03, 0.03))
     jello_model = jello_spec.compile()
     assert jello_model.nflex == 1
     assert jello_model.flex_dim[0] == 3
+    assert jello_model.flex_edgeequality[0] == 0
+    assert jello_spec.flexes[0].young > 0
     assert "<flex" in jello_spec.to_xml_string()
 
     sponge_spec = sponge(count=(2, 2, 2))

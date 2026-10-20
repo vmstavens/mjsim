@@ -15,6 +15,7 @@ Most examples open the native MuJoCo viewer. Close the viewer window to exit.
 | `cartesian_planning.py` | UR10e Cartesian path playback around an obstacle. The planned path is shown in the scene and replayed kinematically. |
 | `gelsight_demo.py` | GelSight Mini-style tactile sensor with a spherical indenter. Press `G` to display raw camera, tactile, and depth images. |
 | `mk_flex.py` | MuJoCo flex catalogue with a rope, cloth, soft cube, and custom mesh flex. Supports `--headless`. |
+| `mocap_gripper_control.py` | Robotiq 2F85 with three actuated slide joints and three actuated hinge joints grasps a box, lifts it, then rotates 90° about world Y. Starts idle for viewer actuator control; use `--auto` or `--headless` for the pickup sequence. |
 | `mocap_rod_wall_force_plot.py` | Mocap body pushes a welded rod into a wall while the weld force is measured and optionally plotted live. Supports `--headless`. |
 | `mocap_sensor.py` | Welded free-body load example comparing site force sensor readings with constraint wrench values. |
 | `mocap_sensor_api.py` | Box welded through a mocap-mounted load-cell body, using a reusable force/torque sensor helper. Supports `--headless`. |
