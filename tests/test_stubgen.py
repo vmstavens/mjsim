@@ -11,36 +11,18 @@ def stubgen(monkeypatch: pytest.MonkeyPatch):
     return mjsim._stubgen
 
 
-def test_default_stub_modules_include_mujoco_mjx(stubgen) -> None:
-    assert "mujoco.mjx" in stubgen.DEFAULT_STUB_MODULES
-
-
-def test_target_modules_includes_importable_mujoco_mjx(
+def test_target_modules_includes_importable_defaults(
     stubgen,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    importable = {"mujoco", "mujoco.mjx"}
+    importable = {"mujoco", "ompl"}
 
     def fake_find_spec(module: str):
         return object() if module in importable else None
 
     monkeypatch.setattr(stubgen.util, "find_spec", fake_find_spec)
 
-    assert list(stubgen._target_modules()) == ["mujoco", "mujoco.mjx"]
-
-
-def test_target_modules_skips_missing_nested_package(
-    stubgen,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fake_find_spec(module: str):
-        if module == "mujoco.mjx":
-            raise ModuleNotFoundError("No module named 'mujoco.mjx'")
-        return object() if module == "mujoco" else None
-
-    monkeypatch.setattr(stubgen.util, "find_spec", fake_find_spec)
-
-    assert list(stubgen._target_modules()) == ["mujoco"]
+    assert list(stubgen._target_modules()) == ["mujoco", "ompl"]
 
 
 def test_ensure_stubs_generates_targets_missing_from_stamp(
@@ -58,10 +40,10 @@ def test_ensure_stubs_generates_targets_missing_from_stamp(
 
     monkeypatch.delenv("MJSIM_SKIP_STUBGEN", raising=False)
     monkeypatch.setattr(stubgen, "_stub_root", lambda: tmp_path)
-    monkeypatch.setattr(stubgen, "_target_modules", lambda: ["mujoco", "mujoco.mjx"])
+    monkeypatch.setattr(stubgen, "_target_modules", lambda: ["mujoco", "ompl"])
     monkeypatch.setattr(stubgen, "_run_stubgen", fake_run_stubgen)
 
     stubgen.ensure_stubs()
 
-    assert generated_targets == [["mujoco.mjx"]]
-    assert stamp.read_text() == "mujoco\nmujoco.mjx"
+    assert generated_targets == [["ompl"]]
+    assert stamp.read_text() == "mujoco\nompl"

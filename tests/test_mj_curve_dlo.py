@@ -108,44 +108,11 @@ def test_update_dlo_ref_updates_mj_model_ball_joints():
     np.testing.assert_allclose(model.qpos_spring[8:12], [0.0, 0.0, 0.0, 1.0])
 
 
-def test_update_dlo_ref_supports_mjx_model():
-    mj = pytest.importorskip("mujoco")
-    mjx = pytest.importorskip("mujoco.mjx")
+def test_update_dlo_ref_rejects_non_mj_model():
+    pytest.importorskip("mujoco")
+    pytest.importorskip("spatialmath")
 
     from mjsim.utils.mj import update_dlo_ref
 
-    model = mj.MjModel.from_xml_string(
-        """
-        <mujoco>
-          <worldbody>
-            <body name="root">
-              <joint name="cable/j0" type="ball"/>
-              <geom type="sphere" size="0.01" mass="0.01"/>
-              <body name="link">
-                <joint name="cable/j1" type="ball"/>
-                <geom type="sphere" size="0.01" mass="0.01"/>
-              </body>
-            </body>
-          </worldbody>
-        </mujoco>
-        """
-    )
-    mjx_model = mjx.put_model(model)
-
-    updated_model, updated = update_dlo_ref(
-        mjx_model,
-        np.array([0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0]),
-        "cable/",
-        joint_name="cable/j1",
-    )
-
-    assert updated == ["cable/j1"]
-    np.testing.assert_allclose(np.asarray(mjx_model.qpos_spring)[0:4], [1, 0, 0, 0])
-    np.testing.assert_allclose(
-        np.asarray(updated_model.qpos_spring)[0:4],
-        [1.0, 0.0, 0.0, 0.0],
-    )
-    np.testing.assert_allclose(
-        np.asarray(updated_model.qpos_spring)[4:8],
-        [0.0, 0.0, 0.0, 1.0],
-    )
+    with pytest.raises(TypeError, match="model must be an mj.MjModel"):
+        update_dlo_ref(object(), np.array([1.0, 0.0, 0.0, 0.0]), "cable/")  # type: ignore[arg-type]

@@ -8,7 +8,6 @@ import mujoco as mj
 import numpy as np
 import spatialmath as sm
 import spatialmath.base as smb
-from mujoco import mjx
 from numpy.typing import ArrayLike
 
 from mjsim.utils.math import rotvec_to_quat
@@ -2139,78 +2138,35 @@ def add_act_freejoint(
     return spec
 
 
-def _model_name(model: mj.MjModel | mjx.Model, name_adr: int) -> str:
-    if name_adr < 0:
-        return ""
-
-    names = model.names
-    if not isinstance(names, bytes):
-        names = np.asarray(names).tobytes()
-
-    end = names.find(b"\0", name_adr)
-    if end < 0:
-        end = len(names)
-    return names[name_adr:end].decode()
-
-
-def _joint_name(model: mj.MjModel | mjx.Model, joint_id: int) -> str:
-    if isinstance(model, mj.MjModel):
-        return mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id) or ""
-
-    name_adrs = np.asarray(model.name_jntadr)
-    if joint_id < 0 or joint_id >= name_adrs.size:
-        return ""
-    return _model_name(model, int(name_adrs[joint_id]))
-
-
-def _set_qpos_spring(
-    model: mj.MjModel | mjx.Model,
-    qpos_adr: int,
-    value: np.ndarray,
-) -> mj.MjModel | mjx.Model:
-    qpos_spring = model.qpos_spring
-    value = np.asarray(value, dtype=np.asarray(qpos_spring).dtype)
-
-    if isinstance(model, mj.MjModel):
-        qpos_spring[qpos_adr : qpos_adr + value.size] = value
-        return model
-
-    if hasattr(qpos_spring, "at"):
-        qpos_spring = qpos_spring.at[qpos_adr : qpos_adr + value.size].set(value)
-    else:
-        qpos_spring = np.asarray(qpos_spring).copy()
-        qpos_spring[qpos_adr : qpos_adr + value.size] = value
-
-    return model.replace(qpos_spring=qpos_spring)
-
-
 def update_dlo_ref(
-    model: mj.MjModel | mjx.Model,
+    model: mj.MjModel,
     qpos: np.ndarray,
     cable_name: str,
     joint_name: str | None = None,
-) -> tuple[mj.MjModel | mjx.Model, list[str]]:
+) -> tuple[mj.MjModel, list[str]]:
     """Update DLO cable ball-joint spring references from a qpos vector.
 
-    MuJoCo models are mutated in place. MJX models are immutable, so the updated
-    model is returned.
+    The model is mutated in place and returned with the updated joint names.
     """
-    nq = int(np.asarray(model.nq))
+    if not isinstance(model, mj.MjModel):
+        raise TypeError("model must be an mj.MjModel")
+
+    nq = int(model.nq)
     qpos = np.asarray(qpos, dtype=np.float64)
     if qpos.ndim != 1 or qpos.size < nq:
         raise ValueError(f"qpos must be a 1D vector with at least {nq} values")
 
     updated: list[str] = []
-    for joint_id in range(int(np.asarray(model.njnt))):
-        name = _joint_name(model, joint_id)
+    for joint_id in range(model.njnt):
+        name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id) or ""
         if not name or cable_name not in name:
             continue
         if joint_name is not None and name != joint_name:
             continue
-        if int(np.asarray(model.jnt_type[joint_id])) != int(mj.mjtJoint.mjJNT_BALL):
+        if int(model.jnt_type[joint_id]) != int(mj.mjtJoint.mjJNT_BALL):
             continue
 
-        qpos_adr = int(np.asarray(model.jnt_qposadr[joint_id]))
+        qpos_adr = int(model.jnt_qposadr[joint_id])
         quat = qpos[qpos_adr : qpos_adr + 4].copy()
         norm = np.linalg.norm(quat)
         if norm < 1e-8:
@@ -2218,15 +2174,15 @@ def update_dlo_ref(
         else:
             quat /= norm
 
-        model = _set_qpos_spring(model, qpos_adr, quat)
+        model.qpos_spring[qpos_adr : qpos_adr + quat.size] = quat
         updated.append(name)
 
     return model, updated
 
 
 def curve_dlo(
-    data: mj.MjData | mjx.Data,
-    model: mj.MjModel | mjx.Model,
+    data: mj.MjData,
+    model: mj.MjModel,
     theta: float,
     phi: float,
     *,
@@ -2234,22 +2190,25 @@ def curve_dlo(
     cable_joint_qpos_adrs: np.ndarray | None = None,
     num_cables: int = 1,
     forward: bool = True,
-) -> mj.MjData | mjx.Data:
+) -> mj.MjData:
     """Apply constant pre-curvature to DLO cable ball joints.
 
-    MuJoCo data is mutated in place. MJX data is returned with replaced qpos.
+    MuJoCo data is mutated in place and returned.
 
     Args:
-        data: ``mj.MjData`` or ``mjx.Data`` to update.
-        model: Matching ``mj.MjModel`` or ``mjx.Model``.
+        data: ``mj.MjData`` to update.
+        model: Matching ``mj.MjModel``.
         theta: Total cable bend angle in radians.
         phi: Bend plane azimuth in radians.
         joint_prefix: MuJoCo joint-name prefix used to find cable ball joints.
-        cable_joint_qpos_adrs: Optional explicit qpos addresses. Use this for
-            MJX models when the model contains non-cable ball joints.
+        cable_joint_qpos_adrs: Optional explicit qpos addresses.
         num_cables: Number of independent cables represented by the joint list.
         forward: Run forward dynamics after updating MuJoCo data.
     """
+    if not isinstance(model, mj.MjModel):
+        raise TypeError("model must be an mj.MjModel")
+    if not isinstance(data, mj.MjData):
+        raise TypeError("data must be an mj.MjData")
     if num_cables <= 0:
         raise ValueError(f"num_cables must be > 0, got {num_cables}")
 
@@ -2257,14 +2216,11 @@ def curve_dlo(
         np.asarray(
             [
                 model.jnt_qposadr[joint_id]
-                for joint_id in range(int(model.njnt))
+                for joint_id in range(model.njnt)
                 if int(model.jnt_type[joint_id]) == int(mj.mjtJoint.mjJNT_BALL)
                 and (
-                    not isinstance(model, mj.MjModel)
-                    or (
-                        mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id) or ""
-                    ).startswith(joint_prefix)
-                )
+                    mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id) or ""
+                ).startswith(joint_prefix)
             ],
             dtype=np.int32,
         )
@@ -2293,12 +2249,7 @@ def curve_dlo(
         )
         qpos[qpos_adrs[:, None] + np.arange(4)] = joint_quat
 
-    if isinstance(data, mj.MjData):
-        data.qpos[:] = qpos
-        if forward:
-            if not isinstance(model, mj.MjModel):
-                raise TypeError("MuJoCo data requires an mj.MjModel for mj_forward")
-            mj.mj_forward(model, data)
-        return data
-
-    return data.replace(qpos=qpos.astype(data.qpos.dtype, copy=False))
+    data.qpos[:] = qpos
+    if forward:
+        mj.mj_forward(model, data)
+    return data
