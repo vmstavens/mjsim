@@ -161,7 +161,7 @@ class DMPCartesian:
         for i in range(1, len(quaternions)):
             quaternions[i] = (
                 -quaternions[i]
-                if np.dot(quaternions[i][1:], quaternions[i - 1][1:]) < 0
+                if np.dot(quaternions[i], quaternions[i - 1]) < 0
                 else quaternions[i]
             )
 
@@ -191,7 +191,7 @@ class DMPCartesian:
         for i in range(1, len(quaternions)):
             quaternions[i] = (
                 -quaternions[i]
-                if np.dot(quaternions[i][1:], quaternions[i - 1][1:]) < 0
+                if np.dot(quaternions[i], quaternions[i - 1]) < 0
                 else quaternions[i]
             )
 

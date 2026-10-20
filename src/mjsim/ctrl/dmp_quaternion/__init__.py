@@ -17,14 +17,12 @@ def _normalize_quat(q: np.ndarray) -> np.ndarray:
     return q / norm
 
 
-def _wxyz_to_xyzw(q: np.ndarray) -> np.ndarray:
-    q = np.asarray(q, dtype=float)
-    return np.array([q[1], q[2], q[3], q[0]])
+def _as_xyzw(q_wxyz: np.ndarray) -> np.ndarray:
+    return np.asarray([q_wxyz[1], q_wxyz[2], q_wxyz[3], q_wxyz[0]], dtype=float)
 
 
-def _xyzw_to_wxyz(q: np.ndarray) -> np.ndarray:
-    q = np.asarray(q, dtype=float)
-    return np.array([q[3], q[0], q[1], q[2]])
+def _as_wxyz(q_xyzw: np.ndarray) -> np.ndarray:
+    return np.asarray([q_xyzw[3], q_xyzw[0], q_xyzw[1], q_xyzw[2]], dtype=float)
 
 
 class DMPQuaternion:
@@ -50,6 +48,7 @@ class DMPQuaternion:
         self._dmp = DMPPosition(
             n_bfs=n_bfs, alpha=alpha, beta=beta, cs=self.cs, roto_dilatation=False
         )
+        self._q0_xyzw: np.ndarray | None = None
 
     def reset(self) -> None:
         """Reset internal DMP state."""
@@ -67,15 +66,18 @@ class DMPQuaternion:
         if quaternions.ndim != 2 or quaternions.shape[1] != 4:
             raise ValueError("quaternions must be shaped (N, 4) in wxyz ordering.")
 
-        # Normalize and convert to rotation vectors for Euclidean DMP fitting.
-        rotvecs = []
-        for q in quaternions:
-            q_norm = _normalize_quat(q)
-            r = Rotation.from_quat(_wxyz_to_xyzw(q_norm))
-            rotvecs.append(r.as_rotvec())
-        rotvecs = np.asarray(rotvecs)
+        quaternions = np.asarray([_normalize_quat(q) for q in quaternions])
+        for i in range(1, len(quaternions)):
+            if np.dot(quaternions[i], quaternions[i - 1]) < 0.0:
+                quaternions[i] *= -1.0
 
-        self._dmp.train(rotvecs, ts, tau)
+        rotations = Rotation.from_quat(np.asarray([_as_xyzw(q) for q in quaternions]))
+        reference = rotations[0]
+        self._q0_xyzw = reference.as_quat()
+
+        relative_rotvecs = (rotations * reference.inv()).as_rotvec()
+
+        self._dmp.train(relative_rotvecs, ts, tau)
 
     def step(
         self,
@@ -95,10 +97,14 @@ class DMPQuaternion:
         Returns:
             Tuple of ``(quaternion_wxyz, angular_velocity, angular_acceleration)``.
         """
+        if self._q0_xyzw is None:
+            raise RuntimeError("Call train() before using step().")
+
         rotvec, drotvec, ddrotvec = self._dmp.step(
             x, dt, tau, force_disturbance=torque_disturbance
         )
-        quat = _xyzw_to_wxyz(Rotation.from_rotvec(rotvec).as_quat())
+        rotation = Rotation.from_rotvec(rotvec) * Rotation.from_quat(self._q0_xyzw)
+        quat = _as_wxyz(rotation.as_quat())
         omega = drotvec
         d_omega = ddrotvec
         return quat, omega, d_omega

@@ -14,7 +14,6 @@ from typing import Iterable
 
 DEFAULT_STUB_MODULES = (
     "mujoco",
-    "mujoco.mjx",
     "ompl",
     "ompl.base",
     "ompl.geometric",
