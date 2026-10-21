@@ -4,6 +4,7 @@ import mujoco as mj
 import mujoco.viewer
 import numpy as np
 from mocap_rod_wall_force_plot import weld_sensor
+from physics.palette import FLAME, apply_palette
 
 from mjsim.utils.mjs import cable, empty_scene
 
@@ -132,6 +133,7 @@ class Sim:
         )
 
         m = scene.compile()
+        apply_palette(m, ("cable/",))
         d = mj.MjData(m)
 
         return m, d
@@ -238,7 +240,7 @@ class Sim:
             np.zeros(3),
             np.zeros(3),
             np.eye(3).reshape(-1),
-            np.array([1.0, 0.1, 0.05, 0.85]),
+            np.array([*FLAME[:3], 0.85]),
         )
         mj.mjv_connector(
             geom,
@@ -280,7 +282,7 @@ class Sim:
                 if self.step_count % 50 == 0:
                     sensor_torque_world = mocap_site_wrench[3:]
                     weld_force_world = self.weld_constraint_force_world()
-                    support_moment = self.support_moment_about_cable_com(
+                    _support_moment = self.support_moment_about_cable_com(
                         weld_force_world
                     )
 

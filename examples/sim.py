@@ -1,5 +1,6 @@
 import mujoco as mj
 import mujoco.viewer
+from physics.palette import apply_palette
 from robot_descriptions import robotiq_2f85_mj_description, ur5e_mj_description
 
 from mjsim.base.robot import Robot
@@ -29,6 +30,7 @@ class Sim:
         s_attachment_site.attach_body(gripper.worldbody.first_body(), prefix="gripper/")
 
         m = scene.compile()
+        apply_palette(m, ())
         d = mj.MjData(m)
 
         return m, d

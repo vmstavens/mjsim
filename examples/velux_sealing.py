@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import time
 from pathlib import Path
 from tempfile import gettempdir
-import time
 from typing import Sequence
 
 import mujoco as mj
 import mujoco.viewer
 import numpy as np
+from physics.palette import apply_palette
 
 from mjsim.utils.mjs import empty_scene
-
 
 ASSET_PATH = Path(__file__).parent / "assets" / "velux-sealing-element.obj"
 
@@ -166,6 +166,7 @@ class Sim:
         tip_body_name = add_velux_seal(scene)
 
         model = scene.compile()
+        apply_palette(model, ("velux_seal",))
         return model, mj.MjData(model), tip_body_name
 
     def step(self) -> None:

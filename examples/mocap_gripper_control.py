@@ -12,6 +12,7 @@ import time
 
 import mujoco as mj
 import numpy as np
+from physics.palette import apply_palette
 from robot_descriptions import robotiq_2f85_mj_description
 
 from mjsim.utils.mjs import empty_scene
@@ -97,6 +98,7 @@ class Sim:
             condim=4,
         )
         model = scene.compile()
+        apply_palette(model, ("box",))
         return model, mj.MjData(model)
 
     def step(self) -> None:

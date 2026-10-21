@@ -11,14 +11,14 @@ import time
 
 import cv2
 import glfw
-import mjsim as ms
 import mujoco as mj
 import numpy as np
+from physics.palette import apply_palette
 from robot_descriptions import ur10e_mj_description
 
+import mjsim as ms
 from mjsim.sensors.camera import Camera
 from mjsim.utils.ompl import xplan
-
 
 HOME_Q = np.array([0.0, -np.pi / 2, np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0])
 OBSTACLE_RADIUS = 0.11
@@ -75,6 +75,7 @@ class Sim(ms.BaseSim):
         )
 
         model = scene.compile()
+        apply_palette(model, ("obstacle", "path_segment", "goal"))
         data = mj.MjData(model)
         data.qpos[: len(HOME_Q)] = HOME_Q
         mj.mj_forward(model, data)
@@ -216,6 +217,7 @@ class Sim(ms.BaseSim):
         )
 
         self._model = scene.compile()
+        apply_palette(self._model, ("obstacle", "path_segment", "goal"))
         self._data = mj.MjData(self._model)
         self._data.qpos[: len(HOME_Q)] = HOME_Q
         mj.mj_forward(self._model, self._data)

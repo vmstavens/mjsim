@@ -5,6 +5,7 @@ from pathlib import Path
 import glfw
 import mujoco as mj
 import numpy as np
+from physics.palette import FLAME, apply_palette, rgb8
 from robot_descriptions import ur10e_mj_description
 
 import mjsim as ms
@@ -166,6 +167,7 @@ class Sim(ms.BaseSim):
         self._add_pusher(scene)
 
         model = scene.compile()
+        apply_palette(model, ("pusher",))
         data = mj.MjData(model)
         mj.mj_resetDataKeyframe(model, data, ur.key("home").id)
         data.ctrl[:] = 0.0
@@ -176,7 +178,8 @@ class Sim(ms.BaseSim):
         target = scene.worldbody.add_body(name="target_frame", mocap=True)
         target.add_site(
             name="target_frame",
-            size=[0.022],
+            type=mj.mjtGeom.mjGEOM_BOX,
+            size=[0.022, 0.022, 0.022],
             rgba=[1.0, 0.0, 1.0, 1.0],
         )
 
@@ -454,10 +457,11 @@ def add_bool_control(server: viser.ViserServer, sim: Sim, label: str, attr: str)
 
 
 def add_gui(server: viser.ViserServer, sim: Sim):
+    server.gui.configure_theme(dark_mode=True, brand_color=rgb8(FLAME))
     server.gui.set_panel_label("Admittance Controller")
     server.gui.add_markdown(
         "Tune the 6D admittance controller live. "
-        "Green is the actual flange frame; magenta is the compliant target."
+        "Off-white sphere: actual flange; orange box: compliant target."
     )
     with server.gui.add_folder("Controller Equations", expand_by_default=True):
         server.gui.add_markdown(CONTROLLER_EQUATIONS)

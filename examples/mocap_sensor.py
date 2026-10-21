@@ -1,6 +1,7 @@
-import numpy as np
 import mujoco as mj
 import mujoco.viewer
+import numpy as np
+from physics.palette import apply_palette
 
 from mjsim.utils.mjs import empty_scene
 
@@ -41,14 +42,14 @@ class Sim:
         scene = empty_scene()
 
         m_body = scene.worldbody.add_body(name="mocap", mocap=True, pos=[0, 0, 0.3])
-        m_geom = m_body.add_geom(
+        _m_geom = m_body.add_geom(
             name="mocap_geom",
             type=mj.mjtGeom.mjGEOM_BOX,
             size=[0.05, 0.05, 0.05],
             contype=0,
             conaffinity=0,
         )
-        s_mocap = m_body.add_site(
+        _s_mocap = m_body.add_site(
             name="mocap_site",
             pos=[0, 0, 0],
             size=[0.05],
@@ -59,13 +60,13 @@ class Sim:
             name="ball",
             pos=[0, 0, 0.1],
         )
-        g_ball = b_ball.add_geom(
+        _g_ball = b_ball.add_geom(
             name="ball_geom",
             type=mj.mjtGeom.mjGEOM_BOX,
             size=[0.2, 0.02, 0.02],
             mass=1000,
         )
-        s_ball = b_ball.add_site(
+        _s_ball = b_ball.add_site(
             name="ball_site",
             pos=[0.2, 0, 0],
             # size=[0.01],
@@ -94,6 +95,7 @@ class Sim:
         )
 
         m = scene.compile()
+        apply_palette(m, ("ball",))
         d = mj.MjData(m)
 
         return m, d

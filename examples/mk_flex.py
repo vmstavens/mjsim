@@ -7,6 +7,7 @@ from tempfile import gettempdir
 import mujoco as mj
 import mujoco.viewer
 import numpy as np
+from physics.palette import apply_palette
 
 from mjsim.utils.mjs import cable, cloth, dlo, empty_scene, sponge
 
@@ -95,6 +96,9 @@ class Sim:
             statistic_extent=0.80,
         )
         spec.memory = 100 * 1024 * 1024
+        if hasattr(mj.mjtIntegrator, "mjINT_DISCRETE"):
+            spec.option.integrator = mj.mjtIntegrator.mjINT_DISCRETE
+            spec.option.noslip_iterations = 0
         spec.visual.global_.azimuth = 115
         spec.visual.global_.elevation = -20
 
@@ -154,7 +158,6 @@ class Sim:
             mass=0.08,
             radius=0.006,
             edge_damping=0.01,
-            edge_stiffness=25.0,
             rgba=[0.98, 0.58, 0.12, 1.0],
             condim=3,
         )
@@ -198,6 +201,7 @@ class Sim:
             damping=0.1,
             thickness=0.006,
             elastic2d="both",
+            edge_equality=False,
             condim=3,
             friction=[0.6, 0.005, 0.0001],
             solref=[0.0001, 0.1],
@@ -242,7 +246,7 @@ class Sim:
             pos=[0.45, 0.24, 0.24],
             radius=0.005,
             mass=0.18,
-            equality=1,
+            equality=0,
         )
 
         mesh.rgba = [0.988235294, 0.058823529, 0.752941176, 1.0]
@@ -257,6 +261,7 @@ class Sim:
         mesh.selfcollide = mj.mjtFlexSelf.mjFLEXSELF_NONE
 
         model = spec.compile()
+        apply_palette(model, ("pusher", "rope_1d"))
         data = mj.MjData(model)
         return model, data
 

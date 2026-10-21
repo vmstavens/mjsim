@@ -20,6 +20,7 @@ import mujoco as mj
 import numpy as np
 import spatialmath as sm
 import spatialmath.base as smb
+from physics.palette import COOL_GRAY, FLAME, OFF_WHITE, apply_palette, style_plot
 from robot_descriptions import ur10e_mj_description
 from scipy.spatial.transform import Rotation
 
@@ -218,6 +219,7 @@ class Sim(ms.BaseSim):
             self._add_path_visuals(scene)
 
         model = scene.compile()
+        apply_palette(model, ("dmp_path", "dmp_goal"))
         data = mj.MjData(model)
         return model, data
 
@@ -428,28 +430,30 @@ class Sim(ms.BaseSim):
 
         fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
         labels = ("x", "y", "z")
+        colors = (FLAME[:3], OFF_WHITE[:3], COOL_GRAY[:3])
         for axis, label in enumerate(labels):
-            axes[0].plot(t, target_p[:, axis], "--", label=f"target {label}")
-            axes[0].plot(t, actual_p[:, axis], label=f"actual {label}")
+            axes[0].plot(t, target_p[:, axis], "--", color=colors[axis], label=f"target {label}")
+            axes[0].plot(t, actual_p[:, axis], color=colors[axis], label=f"actual {label}")
         axes[0].set_ylabel("position [m]")
         axes[0].grid(True, alpha=0.3)
         axes[0].legend(ncol=3, fontsize="small")
 
         for axis, label in enumerate(labels):
-            axes[1].plot(t, target_r[:, axis], "--", label=f"target r{label}")
-            axes[1].plot(t, actual_r[:, axis], label=f"actual r{label}")
+            axes[1].plot(t, target_r[:, axis], "--", color=colors[axis], label=f"target r{label}")
+            axes[1].plot(t, actual_r[:, axis], color=colors[axis], label=f"actual r{label}")
         axes[1].set_ylabel("relative rotvec [rad]")
         axes[1].grid(True, alpha=0.3)
         axes[1].legend(ncol=3, fontsize="small")
 
-        axes[2].plot(t, pos_error, label="position error [m]")
-        axes[2].plot(t, ori_error, label="orientation error [rad]")
+        axes[2].plot(t, pos_error, color=FLAME[:3], label="position error [m]")
+        axes[2].plot(t, ori_error, color=OFF_WHITE[:3], linestyle="--", label="orientation error [rad]")
         axes[2].set_xlabel("time [s]")
         axes[2].set_ylabel("tracking error")
         axes[2].grid(True, alpha=0.3)
         axes[2].legend()
 
-        fig.suptitle("UR10e Cartesian DMP Tracking")
+        fig.suptitle("UR10e Cartesian DMP Tracking", color=OFF_WHITE[:3])
+        style_plot(fig, axes)
         fig.tight_layout()
         self.plot_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(self.plot_path, dpi=180)

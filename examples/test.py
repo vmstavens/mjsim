@@ -1,10 +1,13 @@
 from pathlib import Path
 
 import glfw
-import mjsim as ms
 import mujoco as mj
-from robot_descriptions import ur10e_mj_description, robotiq_2f85_mj_description
 import spatialmath as sm
+from physics.palette import apply_palette
+from robot_descriptions import robotiq_2f85_mj_description, ur10e_mj_description
+
+import mjsim as ms
+
 
 class Sim(ms.BaseSim):
     def __init__(self):
@@ -13,7 +16,7 @@ class Sim(ms.BaseSim):
         self.ur = ms.Robot(self.model, self.data, "ur/")
         self.gripper = ms.Robot(self.model, self.data, "ur/gripper/")
 
-        T = ms.get_pose(self.model, self.data, self.ur.info.site_names[0], ms.ObjType.SITE)
+        _ = ms.get_pose(self.model, self.data, self.ur.info.site_names[0], ms.ObjType.SITE)
 
         self.ctrl = ms.OpSpace(self.ur, gravity_comp=True)
 
@@ -63,6 +66,7 @@ class Sim(ms.BaseSim):
         b_ball.add_freejoint()
 
         m = scene.compile()
+        apply_palette(m, ("ball", "harting/"))
         return m, mj.MjData(m)
 
     @property

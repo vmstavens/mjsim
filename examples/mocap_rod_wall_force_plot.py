@@ -9,6 +9,14 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/mjsim-matplotlib")
 import mujoco as mj
 import mujoco.viewer
 import numpy as np
+from physics.palette import (
+    COOL_GRAY,
+    FLAME,
+    LIGHT_ORANGE,
+    OFF_WHITE,
+    apply_palette,
+    style_plot,
+)
 
 from mjsim.utils.mjs import empty_scene
 
@@ -83,15 +91,16 @@ class LiveForcePlot:
         plt.ion()
         self.fig, self.ax = plt.subplots(num="Mocap weld force")
         self.lines = {
-            "Fx": self.ax.plot([], [], label="Fx", color="tab:red")[0],
-            "Fy": self.ax.plot([], [], label="Fy", color="tab:green")[0],
-            "Fz": self.ax.plot([], [], label="Fz", color="tab:blue")[0],
-            "|F|": self.ax.plot([], [], label="|F|", color="black", linewidth=2)[0],
+            "Fx": self.ax.plot([], [], label="Fx", color=FLAME[:3], linestyle="-")[0],
+            "Fy": self.ax.plot([], [], label="Fy", color=OFF_WHITE[:3], linestyle="--")[0],
+            "Fz": self.ax.plot([], [], label="Fz", color=COOL_GRAY[:3], linestyle=":")[0],
+            "|F|": self.ax.plot([], [], label="|F|", color=LIGHT_ORANGE[:3], linestyle="-.", linewidth=2)[0],
         }
         self.ax.set_xlabel("time [s]")
         self.ax.set_ylabel("force [N]")
         self.ax.grid(True, alpha=0.3)
         self.ax.legend(loc="upper left")
+        style_plot(self.fig, self.ax)
         self.fig.tight_layout()
         self.fig.show()
 
@@ -185,6 +194,7 @@ class Sim:
         add_mocap_weld_sensor(scene, mocap, self.weld_name, "rod_mount_site")
 
         m = scene.compile()
+        apply_palette(m, ("rod",))
         d = mj.MjData(m)
         return m, d
 

@@ -7,10 +7,11 @@ tactile image, and penetration depth image open in OpenCV windows.
 
 import cv2
 import glfw
-import mjsim as ms
 import mujoco as mj
 import numpy as np
+from physics.palette import apply_palette
 
+import mjsim as ms
 from mjsim.sensors.gelsight_mini import GelSightMini
 
 
@@ -71,6 +72,7 @@ class Sim(ms.BaseSim):
         )
 
         model = scene.compile()
+        apply_palette(model, ("indenter",))
         data = mj.MjData(model)
         mj.mj_forward(model, data)
         return model, data

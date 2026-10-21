@@ -8,6 +8,7 @@ an OpenCV window.
 import cv2
 import glfw
 import mujoco as mj
+from physics.palette import apply_palette
 
 import mjsim as ms
 from mjsim.sensors.camera import Camera
@@ -48,6 +49,7 @@ class Sim(ms.BaseSim):
         )
 
         model = scene.compile()
+        apply_palette(model, ("box",))
         data = mj.MjData(model)
         mj.mj_forward(model, data)
         return model, data

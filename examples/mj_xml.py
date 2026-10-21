@@ -1,3 +1,8 @@
+import mujoco as mj
+from physics.palette import FLAME, LIGHT_ORANGE, OFF_WHITE, apply_palette
+
+import mjsim as ms
+
 _XMLS = {
     "bags": """
 
@@ -99,9 +104,6 @@ _XMLS = {
 </mujoco>
 """,
 }
-import mujoco as mj
-
-import mjsim as ms
 
 
 class Sim(ms.BaseSim):
@@ -113,6 +115,7 @@ class Sim(ms.BaseSim):
         scene = mj.MjSpec.from_string(_XMLS["drape"])
         # scene = mj.MjSpec.from_string(_XMLS["bags"])
         m = scene.compile()
+        apply_palette(m, (), flex_colors={"cloth1": FLAME, "cloth2": OFF_WHITE, "cloth3": LIGHT_ORANGE})
         return m, mj.MjData(m)
 
     @property

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import mujoco as mj
 import mujoco.viewer
 import numpy as np
+from physics.palette import apply_palette
 
 from mjsim.utils.mjs import empty_scene
 
@@ -211,6 +212,7 @@ class Sim:
         )
 
         m = scene.compile()
+        apply_palette(m, ("box_geom",))
         d = mj.MjData(m)
         return m, d
 

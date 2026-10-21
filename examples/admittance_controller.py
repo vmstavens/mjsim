@@ -6,7 +6,7 @@ __all__ = ["Sim", "use_motor_actuators"]
 if __name__ == "__main__":
     sim = Sim()
     print(
-        "UR admittance demo. Press space to push the flange; green is actual, "
-        "magenta is compliant target."
+        "UR admittance demo. Press space to push the flange; off-white is actual, "
+        "orange is compliant target."
     )
     sim.run()

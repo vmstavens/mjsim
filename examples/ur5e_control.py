@@ -1,11 +1,12 @@
 import argparse
 
+import glfw
 import mujoco as mj
 import numpy as np
 import spatialmath as sm
+from physics.palette import apply_palette
 from robot_descriptions import robotiq_2f85_mj_description, ur10e_mj_description
 
-import glfw
 import mjsim as ms
 
 
@@ -136,6 +137,7 @@ class Sim(ms.BaseSim):
             self._add_poking_finger(scene)
 
         m = scene.compile()
+        apply_palette(m, ("poker", "ball"))
         d = mj.MjData(m)
         mj.mj_resetDataKeyframe(m, d, m.keyframe("ur/home").id)
         return m, d

@@ -1,11 +1,10 @@
 import mujoco
 import viser
 from mjviser import Viewer
+from physics.palette import FLAME, apply_palette, rgb8
 from robot_descriptions import g1_mj_description
 
 from mjsim.utils.mjs import empty_scene
-
-import mujoco as mj
 
 
 def load_humanoid() -> tuple[mujoco.MjModel, mujoco.MjData]:
@@ -33,6 +32,7 @@ def load_humanoid() -> tuple[mujoco.MjModel, mujoco.MjData]:
     scene.attach(humanoid, prefix="g1/", frame=scene.worldbody.add_frame())
 
     model = scene.compile()
+    apply_palette(model, ())
     data = mujoco.MjData(model)
 
     if model.nkey > 0:
@@ -47,6 +47,7 @@ def load_humanoid() -> tuple[mujoco.MjModel, mujoco.MjData]:
 def main() -> None:
     model, data = load_humanoid()
     server = viser.ViserServer()
+    server.gui.configure_theme(dark_mode=True, brand_color=rgb8(FLAME))
 
     def reset(model: mujoco.MjModel, data: mujoco.MjData) -> None:
         if model.nkey > 0:

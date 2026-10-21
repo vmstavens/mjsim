@@ -11,6 +11,15 @@ from typing import Sequence
 
 import mujoco as mj
 import numpy as np
+from physics.palette import (
+    CHARCOAL,
+    COOL_GRAY,
+    FLAME,
+    GRAPHITE,
+    OFF_WHITE,
+    apply_palette,
+    rgb8,
+)
 
 from mjsim.utils.mjs import cable, empty_scene
 
@@ -42,9 +51,9 @@ RZ_MINUS_90 = np.array(
 )
 
 PALETTE = {
-    "floor": [0.88, 0.88, 0.84, 1.0],
-    "pipe": [0.18, 0.52, 0.85, 0.34],
-    "cable": [0.95, 0.48, 0.10, 1.0],
+    "floor": CHARCOAL.tolist(),
+    "pipe": [*COOL_GRAY[:3], 0.34],
+    "cable": FLAME.tolist(),
 }
 
 
@@ -122,6 +131,7 @@ class DloInsertSim:
         )
 
         model = scene.compile()
+        apply_palette(model, ("cable/",))
         data = mj.MjData(model)
         return model, data
 
@@ -299,18 +309,18 @@ class PaperVisuals:
     def _add_lighting(self) -> None:
         self.server.scene.add_light_ambient(
             "/paper/lights/ambient",
-            color=(245, 246, 247),
+            color=rgb8(OFF_WHITE),
             intensity=0.65,
         )
         self.server.scene.add_light_hemisphere(
             "/paper/lights/hemi",
-            sky_color=(212, 225, 240),
-            ground_color=(214, 211, 202),
+            sky_color=rgb8(COOL_GRAY),
+            ground_color=rgb8(CHARCOAL),
             intensity=0.55,
         )
         self.server.scene.add_light_directional(
             "/paper/lights/key",
-            color=(255, 246, 230),
+            color=rgb8(OFF_WHITE),
             intensity=1.35,
             cast_shadow=True,
             position=(-0.30, -0.35, 0.75),
@@ -324,10 +334,10 @@ class PaperVisuals:
                 height=0.54,
                 plane="xy",
                 cell_size=0.04,
-                cell_color=(205, 207, 204),
+                cell_color=rgb8(GRAPHITE),
                 cell_thickness=0.55,
                 section_size=0.16,
-                section_color=(178, 181, 180),
+                section_color=rgb8(COOL_GRAY),
                 section_thickness=0.85,
                 plane_opacity=0.0,
                 shadow_opacity=0.18,
@@ -339,13 +349,24 @@ class PaperVisuals:
         for name, site_id in self.frame_site_ids.items():
             self.frame_handles[name] = self.server.scene.add_frame(
                 f"/paper/frames/{name}",
-                axes_length=0.035,
-                axes_radius=0.0012,
+                show_axes=False,
+                origin_color=rgb8(OFF_WHITE),
                 origin_radius=0.003,
                 position=self.sim.data.site_xpos[site_id] + self.scene_offset,
                 wxyz=self._frame_wxyz(name, site_id),
                 visible=self.visible and self.frames_visible,
             )
+            # Labelled axes retain their identities without introducing RGB hues.
+            points = np.zeros((3, 2, 3))
+            points[:, 1, :] = np.diag([0.035, 0.028, 0.021])
+            colors = np.repeat(np.array([rgb8(OFF_WHITE), rgb8(FLAME), rgb8(COOL_GRAY)])[:, None, :], 2, axis=1)
+            self.server.scene.add_line_segments(
+                f"/paper/frames/{name}/axes", points=points, colors=colors, line_width=3,
+            )
+            for axis, endpoint in zip("XYZ", points[:, 1, :]):
+                self.server.scene.add_label(f"/paper/frames/{name}/{axis}", text=axis,
+                                            position=endpoint, font_screen_scale=0.7)
+
 
     def _frame_wxyz(self, name: str, site_id: int) -> np.ndarray:
         matrix = self.sim.data.site_xmat[site_id].reshape(3, 3)

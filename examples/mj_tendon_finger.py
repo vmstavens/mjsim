@@ -1,5 +1,6 @@
 import glfw
 import mujoco as mj
+from physics.palette import apply_palette
 
 import mjsim as ms
 
@@ -42,6 +43,7 @@ class Sim(ms.BaseSim):
 
     def _init(self) -> tuple[mj.MjModel, mj.MjData]:
         model = mj.MjModel.from_xml_string(_XML)
+        apply_palette(model, ())
         data = mj.MjData(model)
         return model, data
 

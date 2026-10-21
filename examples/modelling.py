@@ -1,8 +1,10 @@
 import glfw
-import mjsim as ms
 import mujoco as mj
 import spatialmath as sm
+from physics.palette import apply_palette
 from robot_descriptions import robotiq_2f85_mj_description
+
+import mjsim as ms
 
 
 class Sim(ms.BaseSim):
@@ -46,6 +48,7 @@ class Sim(ms.BaseSim):
         b_ball.add_freejoint()
 
         m = scene.compile()
+        apply_palette(m, ("ball", "cable/"))
         return m, mj.MjData(m)
 
     @property

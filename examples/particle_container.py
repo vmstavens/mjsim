@@ -5,6 +5,7 @@ import argparse
 import mujoco as mj
 import mujoco.viewer
 import numpy as np
+from physics.palette import apply_palette
 
 from mjsim.utils.mjs import empty_scene
 
@@ -53,6 +54,7 @@ class Sim:
         self._add_particles(spec)
 
         model = spec.compile()
+        apply_palette(model, ("paddle",))
         data = mj.MjData(model)
         return model, data
 

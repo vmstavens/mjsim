@@ -85,6 +85,31 @@ if __name__ == "__main__":
 - Sensors: MuJoCo camera wrapper with RGB/depth/segmentation and point-cloud extraction (`mjsim.sensors.Camera`).
 
 ## Examples
+
+Start with the [physics gallery and complete examples index](examples/README.md)
+for seven offline MuJoCo systems in a shared carbon-and-flame palette: Newton's
+cradle, buoyant balloons, slider cranks, a muscle arm, active adhesion, a hammock,
+and an elastic jelly block.
+
+```bash
+uv run python examples/physics_gallery.py --list
+uv run python examples/physics_gallery.py newton_cradle
+uv run python examples/physics_gallery.py jelly --headless --duration 5
+```
+
+![Animated Newton's cradle simulation](examples/media/newton_cradle.gif)
+
+Existing examples also cover deformables and contact manipulation:
+
+| Particle stirring | Grasp, lift, and rotate |
+| --- | --- |
+| ![Particles stirred by a moving paddle](examples/media/particle_container.gif) | ![Gripper lifting and rotating a box](examples/media/mocap_gripper_control.gif) |
+
+See the [animated examples](examples/README.md#more-animated-examples) for cloth
+draping, flexible sealing, and commands to run or regenerate the previews.
+
+Additional utility examples:
+
 - `examples/controller_dmp.py` – train and roll out a Cartesian DMP.
 - `examples/planner_rrt.py` – run a minimal OMPL RRT-Connect in joint and task space.
 - `examples/deformable_assets.py` – generate cable and cloth specs and export XML.

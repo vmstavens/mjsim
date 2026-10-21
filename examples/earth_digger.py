@@ -1,4 +1,5 @@
 import mujoco as mj
+from physics.palette import apply_palette
 
 import mjsim as ms
 
@@ -109,6 +110,7 @@ class Sim(ms.BaseSim):
         scene = mj.MjSpec.from_string(_XML)
 
         m = scene.compile()
+        apply_palette(m, ("boom", "stick_link", "cab", "engine_cover"))
         d = mj.MjData(m)
 
         d.qpos[m.joint("slew").qposadr[0]] = 0.0
