@@ -24,6 +24,8 @@ from physics.palette import FLAME, OFF_WHITE, apply_palette  # noqa: E402
 
 @pytest.mark.parametrize("name", EXAMPLES)
 def test_gallery_dynamics_and_palette(name, tmp_path, monkeypatch):
+    if tuple(map(int, mj.__version__.split(".")[:3])) < EXAMPLES[name].min_version:
+        pytest.skip("model requires a newer MuJoCo version")
     monkeypatch.chdir(tmp_path)
     model, data = load_example(name)
     original, original_data = load_example(name, original_colors=True)
@@ -67,6 +69,20 @@ def test_marker_roles_and_material_transparency():
     np.testing.assert_allclose(model.site("actual_frame").rgba[:3], OFF_WHITE[:3])
     np.testing.assert_allclose(model.site("target_frame").rgba[:3], FLAME[:3])
     assert model.site("hidden_sensor").rgba[3] == 0
+
+
+@pytest.mark.skipif(
+    tuple(map(int, mj.__version__.split(".")[:3])) < (3, 11, 0),
+    reason="expanded gallery requires 3.11+",
+)
+def test_cable_plugin_rendering_keeps_palette():
+    model, data = load_example("coil")
+    expected_colors = model.geom_rgba.copy()
+    scene = mj.MjvScene(model, maxgeom=1000)
+    mj.mjv_updateScene(
+        model, data, mj.MjvOption(), None, mj.MjvCamera(), mj.mjtCatBit.mjCAT_ALL, scene
+    )
+    np.testing.assert_array_equal(model.geom_rgba, expected_colors)
 
 
 @pytest.mark.skipif(

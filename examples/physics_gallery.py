@@ -8,8 +8,13 @@ import time
 
 import mujoco as mj
 import numpy as np
-
-from physics.catalog import EXAMPLES, configure_camera, drive, load_example
+from physics.catalog import (
+    EXAMPLES,
+    configure_camera,
+    drive,
+    load_example,
+    track_camera,
+)
 
 
 def positive_float(value: str) -> float:
@@ -87,6 +92,7 @@ def main() -> None:
             with viewer.lock():
                 for _ in range(steps):
                     step()
+                track_camera(args.example, model, data, viewer.cam)
             viewer.sync()
             time.sleep(max(0, 1 / 60 - (time.monotonic() - start)))
 

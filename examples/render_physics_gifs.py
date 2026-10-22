@@ -13,7 +13,13 @@ from pathlib import Path
 
 import mujoco as mj
 import numpy as np
-from physics.catalog import EXAMPLES, configure_camera, drive, load_example
+from physics.catalog import (
+    EXAMPLES,
+    configure_camera,
+    drive,
+    load_example,
+    track_camera,
+)
 from PIL import Image
 
 EXTRA_DURATIONS = {
@@ -80,6 +86,8 @@ def render_gif(name: str, output: Path, duration: float, fps: int) -> None:
                 raise RuntimeError(f"{name}: non-finite simulation state")
             if any(warning.number for warning in data.warning):
                 raise RuntimeError(f"{name}: MuJoCo reported a runtime warning")
+            if name in EXAMPLES:
+                track_camera(name, model, data, camera)
             renderer.update_scene(data, camera=camera)
             frames.append(Image.fromarray(renderer.render()))
 
@@ -132,7 +140,11 @@ def main() -> None:
         parser.error(f"unknown examples: {', '.join(sorted(unknown))}")
     for name in names:
         duration = (
-            args.duration if args.duration is not None else EXTRA_DURATIONS.get(name, 4)
+            args.duration
+            if args.duration is not None
+            else EXTRA_DURATIONS[name]
+            if name in EXTRA_DURATIONS
+            else EXAMPLES[name].duration
         )
         render_gif(name, args.output_dir / f"{name}.gif", duration, args.fps)
 

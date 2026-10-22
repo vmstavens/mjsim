@@ -37,7 +37,7 @@ scene. There are no remaining unthemed displayed scenes.
 
 | Script | Palette | Current appearance |
 | --- | --- | --- |
-| `physics_gallery.py` | Shared | All seven models use carbon/flame by default; original colors remain an explicit comparison option. |
+| `physics_gallery.py` | Shared | All 19 models use carbon/flame by default; original colors remain an explicit comparison option. |
 | `render_physics_gifs.py` | Shared | Uses the gallery loader, conveyor, and selected existing simulations; matching cameras and per-example sequence durations. |
 | `conveyor_belt.py` | Shared | Three dark feeder belts and carousel, neutral rails, orange/off-white luggage; native contact transport. |
 | `mk_flex.py` | Shared | Orange deformables and pusher; neutral surroundings. A preview rollout on 3.11.0 reported QACC instability, so this scene is omitted from the GIF selection. |

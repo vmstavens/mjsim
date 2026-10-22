@@ -35,3 +35,36 @@ demonstration associated with the [reference video](https://www.youtube.com/watc
 It has no external assets. The bundled model was compiled and simulated with
 MuJoCo 3.11.0; the standalone conveyor launcher checks for native `surfacevel`
 support and applies only the palette and user-selected surface speeds.
+
+## Expanded gallery (MuJoCo 3.11+)
+
+The `extended/` directory is vendored unchanged from
+[MuJoCo release 3.11.0](https://github.com/google-deepmind/mujoco/tree/3.11.0/model),
+commit `b85fdca54f0e0038b804af146a0b4e94199e00d0`, under the same Apache 2.0
+license above. It preserves the original directory structure and all required
+includes, the gripper cap mesh, and cube textures. No runtime downloads are needed.
+The current main catalogue was reviewed at commit
+`897e3fcb19bd85623c8dffa0d645255c00cd7931` when selecting these systems.
+
+| Gallery name | File beneath `extended/` |
+| --- | --- |
+| `car` | `car/car.xml` |
+| `dominos` | `sleep/dominos.xml` |
+| `flag` | `flex/flag.xml` |
+| `trampoline` | `flex/trampoline.xml` |
+| `soft_gripper` | `flex/gripper_trilinear.xml` |
+| `pulley` | `flex/pulley.xml` |
+| `basket` | `flex/basket.xml` |
+| `coil` | `plugin/elasticity/coil.xml` |
+| `gears` | `plugin/sdf/gear.xml` |
+| `nut_bolt` | `plugin/sdf/nutbolt.xml` |
+| `treadmill` | `surfacevel/treadmill.xml` |
+| `twisty_cube` | `cube/cube_3x3x3.xml` |
+
+Python adds wheel/face motor inputs, gripper and coil trajectories, a pulley
+keyframe, and an initial nut spin. It also applies the shared palette and camera
+framing. In themed coil views, Python disables the cable plugin’s strain heatmap
+(`vmax=0`) so it cannot replace the palette during rendering. This changes only
+visualization. The source XML and image assets remain unmodified. On versions exposing
+`mjINT_DISCRETE`, the soft-gripper loader selects that integrator for implicit
+flex elasticity, matching the jelly compatibility handling.

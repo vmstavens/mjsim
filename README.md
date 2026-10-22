@@ -86,39 +86,50 @@ if __name__ == "__main__":
 
 ## Examples
 
-Start with the [physics gallery and complete examples index](examples/README.md)
-for seven offline MuJoCo systems in a shared carbon-and-flame palette: Newton's
-cradle, buoyant balloons, slider cranks, a muscle arm, active adhesion, a hammock,
-and an elastic jelly block.
+<table>
+  <tr>
+    <td><a href="examples/physics/models/extended/sleep/dominos.xml"><img src="examples/media/dominos.gif" alt="dominos" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/replicate/newton_cradle.xml"><img src="examples/media/newton_cradle.gif" alt="newton_cradle" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/extended/car/car.xml"><img src="examples/media/car.gif" alt="car" width="280" height="210"></a></td>
+  </tr>
+  <tr>
+    <td><a href="examples/physics/models/extended/plugin/sdf/gear.xml"><img src="examples/media/gears.gif" alt="gears" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/extended/plugin/sdf/nutbolt.xml"><img src="examples/media/nut_bolt.gif" alt="nut_bolt" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/extended/cube/cube_3x3x3.xml"><img src="examples/media/twisty_cube.gif" alt="twisty_cube" width="280" height="210"></a></td>
+  </tr>
+  <tr>
+    <td><a href="examples/physics/models/extended/flex/flag.xml"><img src="examples/media/flag.gif" alt="flag" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/extended/flex/trampoline.xml"><img src="examples/media/trampoline.gif" alt="trampoline" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/hammock/hammock.xml"><img src="examples/media/hammock.gif" alt="hammock" width="280" height="210"></a></td>
+  </tr>
+  <tr>
+    <td><a href="examples/physics/models/extended/flex/basket.xml"><img src="examples/media/basket.gif" alt="basket" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/flex/jelly.xml"><img src="examples/media/jelly.gif" alt="jelly" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/extended/flex/gripper_trilinear.xml"><img src="examples/media/soft_gripper.gif" alt="soft_gripper" width="280" height="210"></a></td>
+  </tr>
+  <tr>
+    <td><a href="examples/physics/models/extended/flex/pulley.xml"><img src="examples/media/pulley.gif" alt="pulley" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/extended/plugin/elasticity/coil.xml"><img src="examples/media/coil.gif" alt="coil" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/tendon_arm/arm26.xml"><img src="examples/media/muscle_arm.gif" alt="muscle_arm" width="280" height="210"></a></td>
+  </tr>
+  <tr>
+    <td><a href="examples/physics/models/balloons/balloons.xml"><img src="examples/media/balloons.gif" alt="balloons" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/adhesion/active_adhesion.xml"><img src="examples/media/adhesion.gif" alt="adhesion" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/extended/surfacevel/treadmill.xml"><img src="examples/media/treadmill.gif" alt="treadmill" width="280" height="210"></a></td>
+  </tr>
+  <tr>
+    <td><a href="examples/conveyor_belt.py"><img src="examples/media/conveyor_belt.gif" alt="conveyor_belt" width="280" height="210"></a></td>
+    <td><a href="examples/particle_container.py"><img src="examples/media/particle_container.gif" alt="particle_container" width="280" height="210"></a></td>
+    <td><a href="examples/mj_xml.py"><img src="examples/media/mj_xml.gif" alt="mj_xml" width="280" height="210"></a></td>
+  </tr>
+  <tr>
+    <td><a href="examples/mocap_gripper_control.py"><img src="examples/media/mocap_gripper_control.gif" alt="mocap_gripper_control" width="280" height="210"></a></td>
+    <td><a href="examples/velux_sealing.py"><img src="examples/media/velux_sealing.gif" alt="velux_sealing" width="280" height="210"></a></td>
+    <td><a href="examples/physics/models/slider_crank/slider_crank.xml"><img src="examples/media/slider_crank.gif" alt="slider_crank" width="280" height="210"></a></td>
+  </tr>
+</table>
 
-```bash
-uv run python examples/physics_gallery.py --list
-uv run python examples/physics_gallery.py newton_cradle
-uv run python examples/physics_gallery.py jelly --headless --duration 5
-```
-
-![Animated Newton's cradle simulation](examples/media/newton_cradle.gif)
-
-Existing examples also cover deformables and contact manipulation:
-
-| Particle stirring | Grasp, lift, and rotate |
-| --- | --- |
-| ![Particles stirred by a moving paddle](examples/media/particle_container.gif) | ![Gripper lifting and rotating a box](examples/media/mocap_gripper_control.gif) |
-
-See the [animated examples](examples/README.md#more-animated-examples) for cloth
-draping, flexible sealing, and commands to run or regenerate the previews.
-
-Additional utility examples:
-
-- `examples/controller_dmp.py` – train and roll out a Cartesian DMP.
-- `examples/planner_rrt.py` – run a minimal OMPL RRT-Connect in joint and task space.
-- `examples/deformable_assets.py` – generate cable and cloth specs and export XML.
-- `examples/grasping_force_closure.py` – inspect grasp matrices and friction cones for a toy grasp.
-- `examples/cartesian_planning.py` – Cartesian RRT-Connect with a simple obstacle.
-- `examples/camera_capture.py` – render RGB/depth from a minimal MuJoCo scene.
-- `examples/ik_stub.py` – exercise `Robot.ik` using a stubbed mink backend.
-
-Run any example with `python examples/<file>.py`.
+[Usage](examples/GUIDE.md) · [Sources](examples/physics/models/UPSTREAM.md)
 
 ## Testing
 Install the optional dev extras and run pytest:
