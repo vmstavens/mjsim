@@ -1,0 +1,46 @@
+<mujoco model="Shadow Hand tactile jar">
+  <include file="hand.xml"/>
+  <statistic center="0 0 0.2" extent="0.65"/>
+  <visual>
+    <headlight ambient="0.4 0.4 0.4" diffuse="0.7 0.7 0.7"/>
+    <global offwidth="1000" offheight="750"/>
+  </visual>
+  <worldbody>
+    <!-- Non-colliding mocap handles for MINK fingertip position targets. -->
+    <body name="thumb_target" mocap="true">
+      <geom type="sphere" size=".006" contype="0" conaffinity="0" group="4" rgba="1 .4 .4 .6"/>
+    </body>
+    <body name="first_target" mocap="true">
+      <geom type="sphere" size=".006" contype="0" conaffinity="0" group="4" rgba=".4 1 .4 .6"/>
+    </body>
+    <body name="middle_target" mocap="true">
+      <geom type="sphere" size=".006" contype="0" conaffinity="0" group="4" rgba=".4 .6 1 .6"/>
+    </body>
+    <body name="ring_target" mocap="true">
+      <geom type="sphere" size=".006" contype="0" conaffinity="0" group="4" rgba="1 .8 .3 .6"/>
+    </body>
+    <body name="little_target" mocap="true">
+      <geom type="sphere" size=".006" contype="0" conaffinity="0" group="4" rgba=".8 .4 1 .6"/>
+    </body>
+    <light pos="0 -0.5 1" dir="0 0 -1"/>
+    <geom name="floor" type="plane" size="1 1 .01" rgba=".13 .14 .16 1"/>
+    <body name="jar" pos=".04 .02 .09">
+      <geom name="jar_shell" type="cylinder" size=".055 .09" rgba=".5 .6 .65 1"/>
+      <body name="lid" pos="0 0 .103">
+        <joint name="lid_hinge" type="hinge" axis="0 0 1" limited="false" damping=".02"/>
+        <geom name="lid_surface" type="cylinder" size=".05 .012" mass=".15"
+              friction="1 .005 .0001" rgba=".2 .3 .4 1"/>
+        <site name="lid_frame" size=".002"/>
+        <geom name="lid_mark" type="box" size=".018 .002 .0005" pos=".025 0 .0125"
+              contype="0" conaffinity="0" mass="0" rgba="1 .7 .2 1"/>
+      </body>
+    </body>
+    <camera name="overview" pos=".65 -.7 .65" xyaxes=".73 .68 0 -.3 .32 .9"/>
+  </worldbody>
+  <sensor>
+    <jointpos name="lid_angle" joint="lid_hinge"/>
+    <jointvel name="lid_velocity" joint="lid_hinge"/>
+    <force name="lid_force" site="lid_frame"/>
+    <torque name="lid_torque" site="lid_frame"/>
+  </sensor>
+</mujoco>

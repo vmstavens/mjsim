@@ -1,5 +1,9 @@
 # Examples
 
+[Shadow Hand tactile jar](shadow_hand_jar.py): red fingertip caps, 85 STF-inspired
+3D force taxels at 100 Hz, and a damped rotating lid. Run `python examples/shadow_hand_jar.py`.
+Add `--ik` for MINK fingertip tracking with draggable targets.
+
 <table>
   <tr>
     <td><a href="physics/models/extended/sleep/dominos.xml"><img src="media/dominos.gif" alt="dominos" width="280" height="210"></a></td>
