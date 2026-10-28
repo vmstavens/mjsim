@@ -251,7 +251,8 @@ def test_deformable_mesh_helper_compiles_and_attaches(tmp_path):
     assert "<flex" in spec.to_xml_string()
     assert "soft_sphere" in spec.to_xml_string()
 
-    scene = empty_scene()
+    # The parent scene controls integration after attaching elastic flexes.
+    scene = empty_scene(integrator="discrete", solver="CG", noslip_iterations=0)
     scene.attach(spec, prefix="", frame=scene.worldbody.add_frame())
     attached_model = scene.compile()
     attached_data = mj.MjData(attached_model)

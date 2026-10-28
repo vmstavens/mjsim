@@ -9,6 +9,27 @@ MuJoCo utilities for quickly stitching together controllers, planners, sensors, 
   pip install -e .
   ```
 
+To upgrade `mjsim` in a consuming uv project:
+
+```bash
+uv sync --upgrade-package mjsim
+```
+
+This also refreshes a Git dependency's locked commit. The upgraded package's
+minimum dependency versions in `pyproject.toml` apply to the consuming project;
+this repository's `uv.lock` does not. To upgrade all dependencies allowed by
+the consuming project's constraints, use `uv sync --upgrade`.
+
+For pip installations, use `pip install --upgrade mjsim` (or the same Git URL
+used to install it). These commands require the updated release or Git commit
+to be available from the project's configured source.
+
+Version 0.1.2 requires MuJoCo 3.17 or newer. Parent scenes containing elastic
+flex objects should use
+`empty_scene(integrator="discrete", solver="CG", noslip_iterations=0)`;
+MuJoCo no longer supports their previous `implicitfast` integration or the
+old flex contact `internal` option.
+
 ## Quick start
 
 ```python
