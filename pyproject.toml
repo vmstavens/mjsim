@@ -47,3 +47,7 @@ mjsim-stubgen = "mjsim._stubgen:main"
 
 [tool.uv.build-backend]
 source-exclude = ["examples/**"]
+
+[tool.ty.environment]
+python = "./.venv"
+extra-paths = ["./typings"]
