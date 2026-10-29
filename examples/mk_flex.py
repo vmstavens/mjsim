@@ -252,7 +252,9 @@ class Sim:
         mesh.rgba = [0.988235294, 0.058823529, 0.752941176, 1.0]
         mesh.young = 12_000.0
         mesh.poisson = 0.2
-        mesh.damping = 0.5
+        # Rayleigh damping scales the elastic stiffness. A value of 0.5 makes
+        # this mesh unstable at the 0.5 ms timestep on MuJoCo 3.11.
+        mesh.damping = 0.01
         mesh.thickness = 0.010
         mesh.elastic2d = 3
         mesh.condim = 3
@@ -326,7 +328,10 @@ class Sim:
             )
 
     def run_viewer(self) -> None:
-        print("MuJoCo 3.10 MjsBody.make_flex creates 1D, 2D, 3D, and mesh flexes.")
+        print(
+            f"MuJoCo {mj.__version__} MjsBody.make_flex creates "
+            "1D, 2D, 3D, and mesh flexes."
+        )
         print(
             "The gray cable uses the composite cable plugin for comparison. "
             "A force-limited slider pusher periodically presses the 3D cube. "

@@ -998,7 +998,11 @@ def deformable_mesh(
 
     This is useful for OBJ surface meshes such as the Stanford bunny. The default
     parameters favor a soft, stable surface mesh that can be stepped directly
-    with the default ``empty_scene`` timestep.
+    with the default ``empty_scene`` timestep. When attaching to another spec,
+    create the parent with
+    ``empty_scene(integrator="discrete", solver="CG", noslip_iterations=0)``
+    so it retains the integration settings required for elastic flexes.
+    The removed ``internal`` contact option must be left disabled.
     """
     source_path = Path(path).expanduser()
     if not source_path.is_file():
@@ -1047,7 +1051,7 @@ def deformable_mesh(
         solver="CG",
         tolerance="1e-6",
         timestep="0.001",
-        integrator="implicitfast",
+        integrator="discrete",
     )
     ET.SubElement(mujoco, "size", memory="100M")
 
@@ -1087,10 +1091,11 @@ def deformable_mesh(
         elasticity_attrs["elastic2d"] = str(elastic2d)
     ET.SubElement(flexcomp, "elasticity", **elasticity_attrs)
 
-    contact_attrs = {
-        "selfcollide": str(selfcollide),
-        "internal": _xml_bool(internal),
-    }
+    # MuJoCo 3.15 removed internal flex contacts; keep accepting the old
+    # disabled default without emitting an attribute the parser rejects.
+    if _xml_bool(internal) != "false":
+        raise ValueError("MuJoCo no longer supports internal flex contacts")
+    contact_attrs = {"selfcollide": str(selfcollide)}
     if condim is not None:
         contact_attrs["condim"] = str(condim)
     if solref is not None:
@@ -1829,7 +1834,7 @@ def cloth(
             type=mj.mjtEq.mjEQ_CONNECT,
             objtype=mj.mjtObj.mjOBJ_BODY,
             name1=f"{cloth_name}_0",
-            data=[0.0] * 11,
+            data=[0.0] * mj.mjNEQDATA,
         )
     return spec
 

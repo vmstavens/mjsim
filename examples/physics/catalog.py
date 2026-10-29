@@ -232,10 +232,13 @@ def load_example(
             plugin.config = {**plugin.config, "vmax": "0"}
     # Newer MuJoCo releases require the discrete integrator for implicit flex
     # elasticity; 3.3.7 uses the integrator authored in the upstream model.
-    if name in ("jelly", "soft_gripper") and hasattr(
+    if name in ("jelly", "soft_gripper", "hammock") and hasattr(
         mj.mjtIntegrator, "mjINT_DISCRETE"
     ):
         spec.option.integrator = mj.mjtIntegrator.mjINT_DISCRETE
+        if name == "soft_gripper":
+            # Interpolated flex nodes attached to moving bodies require CG.
+            spec.option.solver = mj.mjtSolver.mjSOL_CG
     model = spec.compile()
     if not original_colors:
         apply_palette(model, example.accents)
