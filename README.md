@@ -3,11 +3,33 @@
 MuJoCo utilities for quickly stitching together controllers, planners, sensors, and deformable-object assets.
 
 ## Installation
-- Install MuJoCo and its runtime dependencies per the [official guide](https://mujoco.readthedocs.io/).
-- Then install the package (editable mode while developing):
-  ```bash
-  pip install -e .
-  ```
+
+The OBJ/STL meshes and airway texture use Git LFS. After installing Git LFS,
+retrieve the model assets from the repository root:
+
+```bash
+git lfs install
+git lfs pull
+```
+
+From the repository root, use uv to install the project and its locked dependencies:
+
+```bash
+uv sync --locked
+uv run python examples/heterogeneous_cube.py
+```
+
+`uv run` uses the project's `.venv` and installs the local package in editable
+mode. No separate activation or pip installation is needed. The repository
+selects Python 3.12 through `.python-version`. See the
+[MuJoCo guide](https://mujoco.readthedocs.io/) for platform-specific graphics
+runtime requirements.
+
+To validate the cube without opening a viewer:
+
+```bash
+uv run python examples/heterogeneous_cube.py --headless
+```
 
 To upgrade `mjsim` in a consuming uv project:
 
@@ -153,10 +175,10 @@ if __name__ == "__main__":
 [Usage](examples/GUIDE.md) · [Sources](examples/physics/models/UPSTREAM.md)
 
 ## Testing
-Install the optional dev extras and run pytest:
+Run pytest with the optional development dependencies:
 ```bash
-pip install -e ".[dev]"
-pytest
+uv run --extra dev pytest
+uv run --extra dev pytest tests/test_heterogeneous_cube.py
 ```
 
 ### IDE stubs

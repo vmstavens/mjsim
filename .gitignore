@@ -8,6 +8,19 @@ sb.ipynb
 generated_assets/
 src/mjsim/.typings/
 
+# Optional airway comparisons and local regeneration intermediates.
+# Keep the original OBJ/MTL/texture, active collider, current report, and test probes.
+/examples/assets/airways/*_collision_[0-9]*.obj
+/examples/assets/airways/collision_validation_dense.json
+/examples/assets/airways/decimation.json
+/examples/assets/airways/*.npz
+/examples/assets/airways/*.probes.json
+
+# Blender backups and desktop metadata.
+*.blend[0-9]*
+.DS_Store
+Thumbs.db
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,8 +1,317 @@
 # Examples
 
+Run these commands from the repository root using `uv run`. It selects the
+project environment and synchronizes the dependencies declared in
+`pyproject.toml` and `uv.lock`; no virtual-environment activation is needed.
+
+[Airway and tendon-driven bronchoscope](bronchoscope.py): a flexible shaft above
+the tracheal inlet, with a translating, rotating base and a thinner tip steered by
+four pulling tendons. A lit camera at the tip provides a live video inset.
+
+```bash
+uv run python examples/bronchoscope.py
+uv run python examples/bronchoscope.py --manual
+uv run python examples/bronchoscope.py --auto
+uv run python examples/bronchoscope.py --show-collision
+uv run python examples/bronchoscope.py --no-collision
+uv run python examples/bronchoscope.py --headless --auto --duration 28
+MUJOCO_GL=egl uv run python examples/bronchoscope.py --headless --auto --camera-output /tmp/bronchoscope-tip.png
+```
+
+The simulation starts in **manual control**, with the tip 12 mm above the inlet,
+and waits for your input. `--manual` is also accepted explicitly. The optional
+`--auto` demo waits two seconds, then advances the base 60 mm over 24 seconds
+with a smooth start and stop, and holds about 48 mm inside the upper trachea.
+This demonstration stops before navigating the bronchial branches.
+
+Use **C** to switch the main viewport between the external and tip cameras,
+and **V** to hide/show the live inset. The camera has a 90-degree vertical field
+of view, a light on the last tip segment, and a near clipping distance of 0.1 mm.
+It moves and bends with the tip. The inset updates at approximately 10 Hz;
+`--camera-output` saves the final headless camera frame and needs an OpenGL backend
+such as EGL on Linux. Ordinary headless simulation needs no graphics context.
+
+Use **Up/Down** to translate the base by 5 mm along the entry axis, **Left/Right**
+to rotate it by 0.1 rad, and **W/S** or **A/D** to increase the opposing X or Y
+tendon tensions by 0.05 N.
+The depth joint and actuator allow **250 mm of insertion** and **100 mm of
+retraction** from the initial pose (`base_height`: −0.25 to +0.10 m). Negative
+commands advance the scope. The status display shows the 250 mm manual limit.
+Steering directions are relative to the rotating base. Each steering key releases
+the opposite tendon. **Space** releases all tendons, **R** resets to manual control,
+**P** pauses, and **T** stops/resumes automatic insertion from the current depth.
+**B** toggles the collision surface overlay. The status line reports airway-wall
+contact count and summed normal contact force in newtons.
+Manual movement or tendon input stops automatic insertion. The native viewer's
+actuator sliders also expose translation (metres), rotation (radians), and the
+four independent tendon tensions (0–0.6 N). Turn automatic insertion off with
+**T** before using sliders. Headless mode also defaults to manual control;
+add `--auto` to run the insertion sequence. Both modes check for simulation warnings.
+
+The default asset is the OBJ in `examples/assets/airways`; paths resolve relative
+to the script, so the example also runs from other working directories. The OBJ's
+MTL supplies diffuse color, opacity, approximate specular/shininess, and its diffuse
+texture. JPEG textures are converted to PNG in memory; the source assets are
+untouched. A missing texture emits a warning and falls back to the MTL color.
+Use `--airway PATH --airway-scale 0.001` to override the asset or its units.
+The default assumes millimetres, preserves orientation, centers the airway in X/Y,
+and places its lowest point 15 mm above the floor.
+
+The supplied hollow airway is sealed at its top. The example opens an inlet by
+discarding faces touching the top 5 mm in a virtual OBJ copy, preserving the UVs
+and materials. It estimates an entry axis from the upper trachea and aligns the
+scope with that slightly inclined axis. These operations assume the supplied
+upright anatomy. They do not alter any source asset files. Mesh-triangle ray
+queries check radial clearance along the planned route and shorten the travel
+if a narrowing, bend, or obstruction is detected.
+
+The detailed OBJ/MTL is used only for rendering. The matching
+`hollow_airway_collision.obj` is an inner-wall collision surface with **4,999
+triangles**, loaded as a **rigid 2D flex** pinned to the world. It preserves the
+non-convex inner passages and adds no motion degrees of freedom. Triangles have
+a 0.1 mm contact radius, sliding friction is 0.3, and self-collision is disabled.
+The collision inlet is opened at the same plane as the visual inlet before
+decimation; its coordinate system, units, and registration are preserved.
+The original outer wall is omitted from collision geometry because this example
+models insertion inside the lumen. The textured visual model retains both walls.
+
+`--collision PATH` selects another collision-only OBJ with the same coordinates
+and units. Without that flag, the example looks for a sibling named
+`<visual_stem>_collision.obj`. A custom visual asset without a matching sibling
+runs without airway contact; startup output states whether contact is enabled.
+`--no-collision` provides the earlier visual-only behavior for comparison.
+
+The shaft is 280 mm long and 6 mm in diameter; the distal section is 60 mm long
+and 4.8 mm in diameter. This is a discrete elastic rod with passive ball-joint
+springs (20 shaft segments, 8 tip segments), with a softer distal section. Four
+spatial tendons run through guides around the tip and are actuated in tension;
+the tip bends from tendon forces rather than prescribed joint angles. Dimensions,
+stiffness, damping, and tension limits are illustrative and editable in the script.
+The links compensate gravity to keep the soft rod from sagging away from the
+entry axis; tendon forces still bend the rod dynamically.
+The tendon routing starts at the distal section, approximating a sheathed drive
+through the shaft. Airway walls are fixed, and native contact forces resist
+steering into them. This is an illustrative contact setup, with uncalibrated
+friction, stiffness, and damping; it does not model airway tissue deformation.
+
+The 5k mesh allocates detail by region. Inward normal/cone rays estimate local
+lumen width on the inner surface. A surface graph finds wide regions connected
+to the inlet, using a 6.5 mm priority threshold (6 mm shaft plus 0.5 mm clearance).
+These are priorities for approximation, not a proof that the entire scope can
+navigate those branches. Distal branches retain coarse collision geometry.
+
+The inner surface is first reduced to 37,999 triangles. Its priority-region and
+inlet vertices are then frozen, and Blender collapses the remaining distal
+geometry until the complete collision surface is below the 5,000-triangle limit.
+This avoids spending most of the budget on small distal features. The exporter
+fails if protected geometry prevents meeting the requested triangle budget.
+
+Reproduce the region selection, Blender reduction, and collision experiment:
+
+```bash
+# Prepare source-coordinate regions and high-resolution reference probes.
+uv run python examples/prepare_airway_regions.py --output /tmp/airway-regions.npz
+# Generate the default 5k mesh (Blender 4.0+; original OBJ untouched).
+blender --background --factory-startup --threads 4 --python-exit-code 1 --python examples/decimate_airway.py -- --regions /tmp/airway-regions.npz --triangles 5000 --protect-after 38000
+# Compare regional geometry and tendon-driven contact without OpenGL.
+uv run python examples/validate_airway_collision.py --meshes examples/assets/airways/hollow_airway_collision.obj --regions /tmp/airway-regions.npz --report /tmp/airway-collision-validation.json
+```
+
+The [5k validation results](assets/airways/collision_validation.json) use Blender
+4.0.2 Collapse decimation. The original has 1,114,842 triangles; extracting and
+opening its inner wall leaves 450,959 before simplification. The default
+collision OBJ is about 168 KB. Regional errors use 50,000 area-weighted surface
+samples and report the larger RMS/percentile from the two directions. These are
+sampled errors, not certified whole-surface bounds.
+
+| 5k collision strategy | Priority-region RMS error | Priority-region 95th percentile | Priority-region 99th percentile |
+| --- | --- | --- | --- |
+| Uniform inner-wall decimation | 0.634 mm | 1.289 mm | 1.754 mm |
+| Two-stage region protection (default) | 0.164 mm | 0.227 mm | 0.718 mm |
+
+The sampled regional maximum error is 2.60 mm, so the improvement in typical
+error is not a guarantee of uniformly accurate branch transitions. Whole-mesh
+errors include intentionally omitted outer walls and heavily simplified distal
+features and are not the acceptance metric for this collision surface.
+
+Across 1,440 radial queries along the insertion route, all rays hit the collider.
+The radial RMS difference from the original was 0.068 mm and the maximum was
+0.254 mm. Minimum measured lumen radius was 6.31 mm, leaving room for the 3 mm
+shaft radius. Across 300 additional priority-region centers, all retain clearance
+for the 4.8 mm tip and 297 retain clearance for the full 6 mm shaft. Minimum
+measured clearance was 2.77 mm. All 4,622 local reference rays hit the collider;
+95% of first-hit distance errors were below 0.294 mm. Three centers losing full
+shaft clearance and larger errors near transitions remain limitations for deeper
+navigation. The saved [original-surface probes](assets/airways/collision_priority_probes.json)
+support regression checks for tip clearance and regional ray accuracy.
+
+In four separate steering directions at 60 mm insertion, ramping a tendon to
+0.6 N produced sustained wall contact, limited lateral tip motion to about
+4.8–8.2 mm versus 24.1 mm with collisions disabled, and kept measured peak
+penetration below 0.058 mm. After release, tip error was below 0.8 mm within two
+seconds. These tests completed without MuJoCo warnings. Timings exclude
+rendering and use a 1 ms physics step with 100 Hz control/measurement on this
+machine; they are not hardware-independent benchmarks. The viewer and headless
+runner use the same 100 Hz control rate.
+
+The 5k mesh ran at **2.21–2.75× real time** in the headless contact tests, compared
+with 0.21–0.22× for the previous 100k collider: roughly a tenfold improvement.
+The earlier dense-mesh comparison files and their archived report are local
+experiment outputs excluded by `.gitignore`. Regenerate those optional meshes
+with the following command, then select one with `--collision PATH`:
+
+```bash
+blender --background --factory-startup --threads 4 --python-exit-code 1 --python examples/decimate_airway.py -- --triangles 50000 100000 --output-dir /tmp/airway-decimation
+```
+
+The default 5k version meets the budget and supports real-time physics here,
+while preserving the upper-tracheal contact behavior. Dynamic validation covers
+the upper trachea; the regional geometry probes extend into larger branches but
+are not dynamic navigation tests.
+
+[Simplified forearm indentation](forearm_indentation.py): two separate rigid
+**radius and ulna** shapes surrounded by bonded **muscle, fat, and skin**.
+A rounded probe gently indents 1 mm above the radius, releases, then repeats
+between the bones. The native MuJoCo viewer shows measured upward probe force
+and a live force–indentation graph for both locations.
+
+```bash
+uv run python examples/forearm_indentation.py
+uv run python examples/forearm_indentation.py --headless --csv /tmp/forearm.csv
+uv run --extra dev pytest tests/test_forearm_indentation.py
+```
+
+Press **1** to hide/show skin, **2** for fat, **3** for muscle, **E** for mesh
+edges, **P** to pause, and **R** to restart. Layers start translucent; hiding all
+three reveals the two bones. These switches affect visualization only. CSV
+export contains time in seconds, measurement site, phase, indentation in metres,
+and signed world-z probe reaction in newtons. Positive force is upward.
+
+The illustrative geometry is a 20 cm long elliptical segment, initially 7 cm
+wide and 5.2 cm thick, narrowing by 15% toward one end. The skin layer is 1.5 mm
+thick and the fat layer 4 mm thick along the proximal ellipse's principal axes;
+both taper with the segment. The cross-section has 24 sectors and two separate
+eight-sided bone cavities. Shared interface vertices bond the three tissue
+meshes, while vertices on each bone are fixed children of that rigid bone.
+The bones and both end faces are supported, and gravity is disabled. The probe
+is a frictionless 12 mm radius sphere driven by smooth position trajectories.
+
+Material parameters used in this example:
+
+| Region | Density (kg/m³) | Young's modulus (kPa) | Poisson's ratio |
+| --- | ---: | ---: | ---: |
+| Bone | 1908 | Rigid | — |
+| Muscle | 1090 | 30 | 0.40 |
+| Fat | 911 | 1.9 | 0.45 |
+| Skin | 1109 | 210 | 0.40 |
+
+Densities come from the [COMSOL Bioheat Materials Library](https://doc.comsol.com/6.4/doc/com.comsol.help.comsol/comsol_ref_materials.25.73.html).
+Skin and fat modulus magnitudes come from the resting-forearm fit reported by
+[Iivarinen et al. (2011)](https://pubmed.ncbi.nlm.nih.gov/21696992/). Transferring
+those values into this different geometry and Saint Venant–Kirchhoff model does
+**not** reproduce that study's calibration. Muscle stiffness, Poisson ratios,
+and the 0.0001 s elastic damping coefficient are demonstration assumptions.
+Mass is accumulated from each tetrahedron's own tissue density; density is not
+used as a substitute for stiffness and has little influence on the settled,
+gravity-free indentation response.
+
+The simulation uses MuJoCo 3.17's `discrete` integrator, CG solver, and a 0.2 ms
+timestep to accommodate the thin, stiff skin. The sequence lasts 13 simulated
+seconds; physics work is budgeted per viewer frame, so execution can be slower
+than real time. Measurements are sampled at 20 Hz, after refreshing the actual
+contact solution. Zero indentation is calibrated separately at each site against
+the undeformed faceted skin, accounting for the probe radius. The headless check
+rejects solver warnings, nonpositive sampled element volumes, absent hold
+forces, or failed recovery. The tests also check mass, material-interface
+conformity, fixed bone attachments, graph data, and CSV output.
+In the checked configuration, settled reactions are approximately 0.55 N above
+the radius and 0.56 N between the bones at 1 mm indentation. These are outputs
+of this particular coarse model, not reference values for a human forearm.
+
+This is an **illustrative passive mechanics model**, not a patient-specific or
+clinically validated forearm. It omits muscle activation, tissue sliding,
+ligaments, the interosseous membrane, vessels, nerves, and joint motion. Its
+compressibility and coarse mesh are intentional simplifications. Force values
+depend on geometry, boundary conditions, material assumptions, and mesh
+resolution; neither measurement site is assumed in advance to be stiffer.
+Medical predictions would require appropriate constitutive laws, mesh and
+timestep convergence studies, and validation against measurements.
+
+[Cylinder with a stiff core and soft coat](heterogeneous_cylinder.py): a solid
+12 cm tall cylinder, with a **blue 3 cm radius core (25 kPa)** surrounded by an
+**orange coat extending to 6 cm radius (5 kPa)**. Both regions have density
+1000 kg/m³ and extend the full height; there are no soft end caps. The coat is
+translucent so the core is visible. Press **C** to hide/show the coat without
+changing physics, **P** to pause, **R** to repeat, or **E** to show mesh edges.
+
+```bash
+uv run python examples/heterogeneous_cylinder.py
+uv run python examples/heterogeneous_cylinder.py --headless
+```
+
+The circular cross-section is approximated with 16 sectors and extruded into
+four axial layers: 165 vertex bodies and 576 tetrahedra. The two material regions
+share all 80 interface vertices, creating a bonded radial boundary with no
+overlapping volumes. Mass is accumulated from the volume of each tetrahedron.
+The scene reuses the cube's slow compression/release cycle, clamped bottom,
+zero gravity, and native MuJoCo viewer.
+
+Unlike the stacked cube layers, the core and coat sit beside each other under
+the plate, so they have similar axial shortening. At the settled hold, both
+shorten approximately **6.65%**, while the mean axial elastic stress is about
+**1.39 kPa in the core** and **0.28 kPa in the coat**. The readout reconstructs
+Saint Venant–Kirchhoff elastic stress from the simulated vertex positions;
+it excludes damping/contact impulses and is not an instantaneous plate-force
+sensor. After release, residual vertex displacement is approximately 0.003 mm.
+The headless run checks load sharing, recovery, warnings, and sampled element
+volumes. Mesh conformity, shared interface masses, and stress reconstruction
+are covered in `tests/test_heterogeneous_cylinder.py`.
+
+[Heterogeneous deformable cube](heterogeneous_cube.py): a 12 cm cube with an
+**orange soft upper half (5 kPa)** bonded to a **blue stiff lower half (25 kPa)**.
+Both have density **1000 kg/m³**. A plate slowly compresses the cube by 8 mm,
+holds, and lifts away. The native MuJoCo viewer reports each layer's percentage
+shortening; press **P** to pause, **R** to repeat, or **E** to show mesh edges.
+
+```bash
+uv run python examples/heterogeneous_cube.py
+uv run python examples/heterogeneous_cube.py --headless
+```
+
+The cube has 125 vertex bodies and 384 tetrahedra, split into two 3D flexes with
+different Young's moduli. Their 25 interface vertices reference the **same
+bodies**, so the material regions cannot separate. Mass is computed from each
+tetrahedron's volume and density and accumulated at its vertices, including
+both regions' contributions at the interface. Contact between the bonded flexes
+is disabled; the plate interacts with them through frictionless contact.
+
+The lower face is clamped and gravity is disabled to isolate the imposed load.
+The 13-second load/release cycle uses smooth plate motion. In the validated run,
+the soft layer shortens approximately **11.1%**, versus **2.2%** for the stiff
+layer, and all vertices return within 0.1 mm of their starting positions after
+release. The headless check also checks recovery, simulation warnings, and
+sampled tetrahedron volumes for inversion. A uniform-stiffness control is
+included in `tests/test_heterogeneous_cube.py`.
+
+This first example varies **stiffness**, with equal density throughout. The
+dimensions and material properties are class constants near the top of the
+script. It uses MuJoCo's [Saint Venant–Kirchhoff flex elasticity](https://mujoco.readthedocs.io/en/3.11.0/XMLreference.html#flex-elasticity)
+with Poisson's ratio 0.25; it is an illustrative elastic solid, not a calibrated
+foam model for crushing or permanent deformation. Uses the `discrete` integrator
+required by current flex elasticity; validated with MuJoCo 3.17.0.
+
 [Shadow Hand tactile jar](shadow_hand_jar.py): red fingertip caps, 85 STF-inspired
-3D force taxels at 100 Hz, and a damped rotating lid. Run `python examples/shadow_hand_jar.py`.
+3D force taxels at 100 Hz, and a damped rotating lid. Run `uv run python examples/shadow_hand_jar.py`.
 Add `--ik` for MINK fingertip tracking with draggable targets.
+
+[Robotis HX5-D20 tactile jar](robotis_hand_jar.py): a separate copy of the jar
+scene using the Robotis hand's 20 actuators and five native 3×3 normal-force
+tactile grids. Run `uv run python examples/robotis_hand_jar.py`; add `--ik` for
+draggable fingertip targets or `--headless` for a smoke check. C/O curl/open,
+Up/Down move the mount, T toggles sensing volumes, and P prints readings. A live
+overlay displays all 45 taxels in newtons. See the [model notes](assets/robotis_hand/UPSTREAM.md)
+for controls, sensor interpretation, and provenance. The lid remains passive;
+there is no automatic grasp/turn sequence.
 
 [Closed cable knot recognition](dlo_knot.py): four capsule cables displayed
 in two rows in one native MuJoCo scene: **unknot** (blue), **trefoil** (orange),
@@ -10,8 +319,8 @@ in two rows in one native MuJoCo scene: **unknot** (blue), **trefoil** (orange),
 equality between endpoint sites**. No knot-selection flags are needed:
 
 ```bash
-python examples/dlo_knot.py
-python examples/dlo_knot.py --headless --steps 500
+uv run python examples/dlo_knot.py
+uv run python examples/dlo_knot.py --headless --steps 500
 ```
 
 The overhand is shown with a gray **physical outer return arc** joining its
@@ -63,9 +372,9 @@ precurved reference, intermediate body targets, or cable-position playback is
 used in this default mode.
 
 ```bash
-python examples/dlo_tie_overhand.py
-python examples/dlo_tie_overhand.py --headless
-python examples/dlo_tie_overhand.py --preformed  # earlier preformed-loop version
+uv run python examples/dlo_tie_overhand.py
+uv run python examples/dlo_tie_overhand.py --headless
+uv run python examples/dlo_tie_overhand.py --preformed  # earlier preformed-loop version
 ```
 
 Press **P** to pause/resume or **R** to reset. After a one-second straight hold,

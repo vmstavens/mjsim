@@ -1,0 +1,302 @@
+{
+  "mujoco": "3.17.0",
+  "source": "hollow_airway.obj",
+  "samples_per_direction": 50000,
+  "baseline": {
+    "compile_seconds": 6.493791507999958,
+    "directions": [
+      {
+        "tendon": 0,
+        "local_tip_deflection_mm": [
+          24.118642732404858,
+          -6.195131213582172e-13,
+          6.616696526798318
+        ],
+        "peak_contacts": 0,
+        "peak_normal_force_N": 0.0,
+        "peak_penetration_mm": 0.0,
+        "held_contacts": 0,
+        "held_normal_force_N": 0.0,
+        "release_error_mm": 0.5694022254116156,
+        "simulated_seconds": 2.0,
+        "wall_seconds": 0.19307811800081254,
+        "real_time_factor": 10.358501629851101
+      },
+      {
+        "tendon": 1,
+        "local_tip_deflection_mm": [
+          -24.118642732404783,
+          -5.99563801384484e-13,
+          6.616696526798216
+        ],
+        "peak_contacts": 0,
+        "peak_normal_force_N": 0.0,
+        "peak_penetration_mm": 0.0,
+        "held_contacts": 0,
+        "held_normal_force_N": 0.0,
+        "release_error_mm": 0.5694022254115619,
+        "simulated_seconds": 2.0,
+        "wall_seconds": 0.1993877919994702,
+        "real_time_factor": 10.03070438738453
+      },
+      {
+        "tendon": 2,
+        "local_tip_deflection_mm": [
+          4.174178364069192e-14,
+          24.118642732404236,
+          6.616696526798244
+        ],
+        "peak_contacts": 0,
+        "peak_normal_force_N": 0.0,
+        "peak_penetration_mm": 0.0,
+        "held_contacts": 0,
+        "held_normal_force_N": 0.0,
+        "release_error_mm": 0.5694022254112084,
+        "simulated_seconds": 2.0,
+        "wall_seconds": 0.19543863499984582,
+        "real_time_factor": 10.233391161382077
+      },
+      {
+        "tendon": 3,
+        "local_tip_deflection_mm": [
+          3.5019730171281793e-14,
+          -24.118642732405487,
+          6.616696526798426
+        ],
+        "peak_contacts": 0,
+        "peak_normal_force_N": 0.0,
+        "peak_penetration_mm": 0.0,
+        "held_contacts": 0,
+        "held_normal_force_N": 0.0,
+        "release_error_mm": 0.5694022254119545,
+        "simulated_seconds": 2.0,
+        "wall_seconds": 0.1995147409998026,
+        "real_time_factor": 10.02432196226533
+      }
+    ]
+  },
+  "variants": [
+    {
+      "mesh": "hollow_airway_collision.obj",
+      "triangles": 4999,
+      "vertices": 2188,
+      "file_bytes": 168305,
+      "original_to_collision": {
+        "rms_mm": 4.395230770111084,
+        "p95_mm": 9.421695709228516,
+        "p99_mm": 14.676916122436523,
+        "max_sample_mm": 24.074365615844727
+      },
+      "collision_to_original": {
+        "rms_mm": 1.1270886659622192,
+        "p95_mm": 2.3850274085998535,
+        "p99_mm": 2.913336992263794,
+        "max_sample_mm": 6.292266368865967
+      },
+      "priority_surface": {
+        "reference": "Connected inner wall with estimated diameter >= priority threshold",
+        "collision_triangles_nearest_priority": 1933,
+        "reference_to_collision": {
+          "rms_mm": 0.11751481890678406,
+          "p95_mm": 0.1886821836233139,
+          "p99_mm": 0.5054055452346802,
+          "max_sample_mm": 2.015000104904175
+        },
+        "collision_to_reference": {
+          "rms_mm": 0.1637295037508011,
+          "p95_mm": 0.22671912610530853,
+          "p99_mm": 0.7183090448379517,
+          "max_sample_mm": 2.6015894412994385
+        },
+        "probe_rays_expected": 4622,
+        "probe_rays_hit": 4622,
+        "probe_centers": 300,
+        "probe_centers_clear_for_tip": 300,
+        "probe_centers_clear_for_shaft": 297,
+        "minimum_probe_clearance_mm": 2.768803834915161,
+        "probe_first_hit_error": {
+          "rms_mm": 0.43119919300079346,
+          "p95_mm": 0.29336047172546387,
+          "p99_mm": 1.715580701828003,
+          "max_sample_mm": 10.241059303283691
+        }
+      },
+      "compile_seconds": 4.490899262000312,
+      "clearance": {
+        "ray_count": 1440,
+        "valid_rays": 1440,
+        "minimum_collision_radius_mm": 6.314151763916016,
+        "radial_error": {
+          "rms_mm": 0.06841888354928256,
+          "p95_mm": 0.1371222440229088,
+          "p99_mm": 0.1971360421631564,
+          "max_sample_mm": 0.2544410836251316
+        }
+      },
+      "directions": [
+        {
+          "tendon": 0,
+          "local_tip_deflection_mm": [
+            6.222981319069086,
+            -0.3727602973060666,
+            1.9435809283500762
+          ],
+          "peak_contacts": 9,
+          "peak_normal_force_N": 0.026301734346003056,
+          "peak_penetration_mm": 0.03620775923194953,
+          "held_contacts": 4,
+          "held_normal_force_N": 0.026095990482139866,
+          "release_error_mm": 0.031083058216165627,
+          "simulated_seconds": 2.0,
+          "wall_seconds": 0.8201099600000816,
+          "real_time_factor": 2.438697366874804
+        },
+        {
+          "tendon": 1,
+          "local_tip_deflection_mm": [
+            -4.835702629934366,
+            -0.41876444157549325,
+            1.5840375090960794
+          ],
+          "peak_contacts": 9,
+          "peak_normal_force_N": 0.032795431760111696,
+          "peak_penetration_mm": 0.04130245448633243,
+          "held_contacts": 4,
+          "held_normal_force_N": 0.032795431760111696,
+          "release_error_mm": 0.027057174258302924,
+          "simulated_seconds": 2.0,
+          "wall_seconds": 0.7599686000003203,
+          "real_time_factor": 2.631687677621361
+        },
+        {
+          "tendon": 2,
+          "local_tip_deflection_mm": [
+            0.8714298317314134,
+            5.592767717909238,
+            2.6482469359146728
+          ],
+          "peak_contacts": 9,
+          "peak_normal_force_N": 0.01952968870118354,
+          "peak_penetration_mm": 0.03395087024381776,
+          "held_contacts": 4,
+          "held_normal_force_N": 0.01952968870118354,
+          "release_error_mm": 0.7396647229085459,
+          "simulated_seconds": 2.0,
+          "wall_seconds": 0.7275208390001353,
+          "real_time_factor": 2.7490621474825248
+        },
+        {
+          "tendon": 3,
+          "local_tip_deflection_mm": [
+            -0.924131569473526,
+            -8.22339852460246,
+            2.6244794323320346
+          ],
+          "peak_contacts": 14,
+          "peak_normal_force_N": 0.033939646932741735,
+          "peak_penetration_mm": 0.057829539358083236,
+          "held_contacts": 14,
+          "held_normal_force_N": 0.024046209713849652,
+          "release_error_mm": 0.029330208930595323,
+          "simulated_seconds": 2.0,
+          "wall_seconds": 0.903486843999417,
+          "real_time_factor": 2.2136459576397445
+        }
+      ]
+    }
+  ],
+  "scope": "Main-airway priority surface sampling, 300 tip-clearance centers, and upper-tracheal dynamic contact; not a full-device motion-planning proof.",
+  "priority_regions": {
+    "source": "hollow_airway.obj",
+    "source_sha256": "9709c1d2e1d5e039d89b415625be78ebac4ced376b4555ae0324bcbb9d63df9f",
+    "inner_component": 1,
+    "original_components": 27,
+    "inner_triangles_before_opening": 452010,
+    "opened_inner_triangles": 450959,
+    "minimum_diameter_mm": 6.5,
+    "reachable_vertices": 20209,
+    "probe_centers": 300,
+    "inlet_cut_z_source_units": 140.45895385742188,
+    "note": "Connected surface-width heuristic; no proof of full-device reachability. Inner wall only."
+  },
+  "generation": {
+    "source": "hollow_airway.obj",
+    "source_sha256": "9709c1d2e1d5e039d89b415625be78ebac4ced376b4555ae0324bcbb9d63df9f",
+    "blender": "4.0.2",
+    "source_triangles": 1114842,
+    "opened_triangles": 450959,
+    "inlet_cut_z_source_units": 140.45895385742188,
+    "variants": [
+      {
+        "file": "hollow_airway_collision.obj",
+        "triangles": 4999,
+        "vertices": 2188,
+        "seconds": 0.21582610400037083,
+        "bytes": 168305
+      }
+    ],
+    "regions": {
+      "source": "hollow_airway.obj",
+      "source_sha256": "9709c1d2e1d5e039d89b415625be78ebac4ced376b4555ae0324bcbb9d63df9f",
+      "inner_component": 1,
+      "original_components": 27,
+      "inner_triangles_before_opening": 452010,
+      "opened_inner_triangles": 450959,
+      "minimum_diameter_mm": 6.5,
+      "reachable_vertices": 20209,
+      "probe_centers": 300,
+      "inlet_cut_z_source_units": 140.45895385742188,
+      "note": "Connected surface-width heuristic; no proof of full-device reachability. Inner wall only."
+    },
+    "weight_factor": 10.0,
+    "intermediate_triangles": 37999,
+    "frozen_vertices": 1175
+  },
+  "selected": "hollow_airway_collision.obj",
+  "timing_note": "Headless 1 ms physics, 100 Hz control/measurement on this machine; excludes rendering and release/settle time.",
+  "geometry_note": "Priority-surface distances are sampled. Whole-mesh errors include intentionally omitted outer walls and coarsened distal branches.",
+  "uniform_5000_comparison": {
+    "mesh": "hollow_airway_collision.obj",
+    "triangles": 5000,
+    "vertices": 2169,
+    "file_bytes": 169195,
+    "original_to_collision": {
+      "rms_mm": 2.170607566833496,
+      "p95_mm": 3.2793548107147217,
+      "p99_mm": 5.97782039642334,
+      "max_sample_mm": 19.549598693847656
+    },
+    "collision_to_original": {
+      "rms_mm": 0.7421108484268188,
+      "p95_mm": 1.5088651180267334,
+      "p99_mm": 2.1130290031433105,
+      "max_sample_mm": 3.2741196155548096
+    },
+    "priority_surface": {
+      "reference": "Connected inner wall with estimated diameter >= priority threshold",
+      "collision_triangles_nearest_priority": 233,
+      "reference_to_collision": {
+        "rms_mm": 0.5929523706436157,
+        "p95_mm": 1.2039693593978882,
+        "p99_mm": 1.5384185314178467,
+        "max_sample_mm": 2.460385799407959
+      },
+      "collision_to_reference": {
+        "rms_mm": 0.6338803768157959,
+        "p95_mm": 1.289446234703064,
+        "p99_mm": 1.7542489767074585,
+        "max_sample_mm": 3.0262291431427
+      },
+      "probe_rays_expected": 4622,
+      "probe_rays_hit": 4622,
+      "probe_first_hit_error": {
+        "rms_mm": 1.0409760475158691,
+        "p95_mm": 1.7784326076507568,
+        "p99_mm": 3.1122937202453613,
+        "max_sample_mm": 11.917705535888672
+      }
+    },
+    "method": "uniform",
+    "note": "Unweighted inner-wall-only baseline; priority surface uses identical original reference."
+  }
+}
