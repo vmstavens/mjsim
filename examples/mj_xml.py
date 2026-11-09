@@ -1,3 +1,6 @@
+import argparse
+from pathlib import Path
+
 import mujoco as mj
 from physics.palette import FLAME, LIGHT_ORANGE, OFF_WHITE, apply_palette
 
@@ -8,7 +11,7 @@ _XMLS = {
 
 <mujoco model="Bag">
   <compiler angle="radian" meshdir=""/>
-  <option timestep="0.0001" jacobian="sparse" integrator="implicitfast" solver="Newton"
+  <option timestep="0.0001" jacobian="sparse" integrator="discrete" solver="CG"
           iterations="2000" tolerance="1e-4"/>
   <statistic extent="2.5" center="0 0 1"/>
 
@@ -70,13 +73,10 @@ _XMLS = {
 <mujoco model="Drape">
   <include file="examples/assets/scene.xml"/>
 
-  <!-- Three cloths dropped over a sphere. All contacts are passive (cloth-cloth, self, and
-       cloth-vs-static sphere) with stiffness carried implicitly by the effective metric. -->
+  <!-- Three elastic sheets drape over a fixed sphere using frictional solver contacts.
+       Passive flex contacts are frictionless and cannot hold a cloth drape. -->
 
-  <!-- The metric solve for qacc_smooth is iterative and its blocks do not see the vertex-to-vertex
-       coupling that contact introduces, so a contact-rich scene like this one needs a larger
-       iteration budget than the default to converge it. -->
-  <option timestep="0.0002" solver="Newton" tolerance="1e-6" iterations="400" integrator="implicitfast"/>
+  <option timestep="0.001" solver="CG" tolerance="1e-6" iterations="100" integrator="discrete"/>
 
   <size memory="50M"/>
 
@@ -85,19 +85,19 @@ _XMLS = {
 
     <flexcomp type="grid" count="13 13 1" spacing=".055 .055 .055" pos="0 0 .68"
               radius=".004" mass=".25" name="cloth1" dim="2" rgba=".85 .35 .25 1">
-      <contact selfcollide="auto" passive="true" solref="0.01 1" solimp=".95 .99 .0001"/>
+      <contact selfcollide="auto" passive="false" condim="3" friction="1.0 0.005 0.0001" solref="0.01 1" solimp=".95 .99 .0001"/>
       <elasticity young="2e4" poisson=".2" thickness="1e-3" elastic2d="both" damping="1e-2"/>
     </flexcomp>
 
     <flexcomp type="grid" count="13 13 1" spacing=".055 .055 .055" pos=".06 -.04 .78"
               radius=".004" mass=".25" name="cloth2" dim="2" rgba=".25 .55 .8 1">
-      <contact selfcollide="auto" passive="true" solref="0.01 1" solimp=".95 .99 .0001"/>
+      <contact selfcollide="auto" passive="false" condim="3" friction="1.0 0.005 0.0001" solref="0.01 1" solimp=".95 .99 .0001"/>
       <elasticity young="2e4" poisson=".2" thickness="1e-3" elastic2d="both" damping="1e-2"/>
     </flexcomp>
 
     <flexcomp type="grid" count="13 13 1" spacing=".055 .055 .055" pos="-.05 .05 .88"
               radius=".004" mass=".25" name="cloth3" dim="2" rgba=".95 .8 .3 1">
-      <contact selfcollide="auto" passive="true" solref="0.01 1" solimp=".95 .99 .0001"/>
+      <contact selfcollide="auto" passive="false" condim="3" friction="1.0 0.005 0.0001" solref="0.01 1" solimp=".95 .99 .0001"/>
       <elasticity young="2e4" poisson=".2" thickness="1e-3" elastic2d="both" damping="1e-2"/>
     </flexcomp>
   </worldbody>
@@ -107,15 +107,21 @@ _XMLS = {
 
 
 class Sim(ms.BaseSim):
-    def __init__(self):
+    def __init__(self, scene_name: str = "drape"):
+        self.scene_name = scene_name
         self._model, self._data = self._init()
 
     def _init(self) -> tuple[mj.MjModel, mj.MjData]:
 
-        scene = mj.MjSpec.from_string(_XMLS["drape"])
-        # scene = mj.MjSpec.from_string(_XMLS["bags"])
+        assets = (Path(__file__).resolve().parent / "assets").as_posix()
+        xml = _XMLS[self.scene_name].replace("examples/assets/", f"{assets}/")
+        scene = mj.MjSpec.from_string(xml)
         m = scene.compile()
-        apply_palette(m, (), flex_colors={"cloth1": FLAME, "cloth2": OFF_WHITE, "cloth3": LIGHT_ORANGE})
+        apply_palette(
+            m,
+            (),
+            flex_colors={"cloth1": FLAME, "cloth2": OFF_WHITE, "cloth3": LIGHT_ORANGE},
+        )
         return m, mj.MjData(m)
 
     @property
@@ -136,6 +142,19 @@ class Sim(ms.BaseSim):
 
 
 if __name__ == "__main__":
-    sim = Sim()
+    parser = argparse.ArgumentParser(description="Cloth drape and suspended bag demos.")
+    parser.add_argument("scene", nargs="?", choices=_XMLS, default="drape")
+    parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--duration", type=float, default=3.0)
+    args = parser.parse_args()
+    sim = Sim(args.scene)
+    if args.headless:
+        import numpy as np
 
-    sim.run()
+        for _ in range(round(args.duration / sim.model.opt.timestep)):
+            mj.mj_step(sim.model, sim.data)
+            if np.any(sim.data.warning.number):
+                raise RuntimeError("MuJoCo reported a simulation warning")
+        print(f"{args.scene}: simulated {sim.data.time:.3f} s without warnings")
+    else:
+        sim.run()

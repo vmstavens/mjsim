@@ -15,7 +15,7 @@ class Sim(ms.BaseSim):
 
     def _init(self) -> tuple[mj.MjModel, mj.MjData]:
 
-        scene = ms.empty_scene(memory="100M")
+        scene = ms.empty_scene(memory="100M", integrator="discrete", solver="CG", noslip_iterations=0)
 
         # load gripper
         gripper = mj.MjSpec.from_file(robotiq_2f85_mj_description.MJCF_PATH)

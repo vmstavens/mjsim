@@ -75,7 +75,7 @@ def test_marker_roles_and_material_transparency():
     tuple(map(int, mj.__version__.split(".")[:3])) < (3, 11, 0),
     reason="expanded gallery requires 3.11+",
 )
-def test_cable_plugin_rendering_keeps_palette():
+def test_native_rod_rendering_keeps_palette():
     model, data = load_example("coil")
     expected_colors = model.geom_rgba.copy()
     scene = mj.MjvScene(model, maxgeom=1000)

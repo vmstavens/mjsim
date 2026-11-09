@@ -69,13 +69,20 @@ def apply_palette(
         model.geom_rgba[i, 3] = alpha
     model.geom_matid[:] = -1
 
-    for colors, materials in (
-        (model.flex_rgba, model.flex_matid),
-        (model.skin_rgba, model.skin_matid),
-    ):
-        for i, material in enumerate(materials):
-            if material >= 0:
-                colors[i, 3] = min(colors[i, 3], model.mat_rgba[material, 3])
+    # MuJoCo 4 stores material IDs per flex element, while rgba stays per flex.
+    for i in range(model.nflex):
+        start = model.flex_elemadr[i]
+        ids = model.flex_matid[start : start + model.flex_elemnum[i]]
+        ids = ids[ids >= 0]
+        if ids.size:
+            model.flex_rgba[i, 3] = min(
+                model.flex_rgba[i, 3], model.mat_rgba[ids, 3].min()
+            )
+    for i, material in enumerate(model.skin_matid):
+        if material >= 0:
+            model.skin_rgba[i, 3] = min(
+                model.skin_rgba[i, 3], model.mat_rgba[material, 3]
+            )
 
     for colors, color in (
         (model.flex_rgba, FLAME),

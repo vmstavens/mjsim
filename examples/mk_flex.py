@@ -74,8 +74,8 @@ class Sim:
         self.flex_body_ids = {
             name: self._named_body_ids(f"{name}_") for name in self.flex_names
         }
-        self.composite_cable_body_ids = self._body_ids_with_prefix(
-            "composite_cable:B"
+        self.elastic_cable_body_ids = self._named_body_ids(
+            "elastic_cable_"
         )
 
         n_threads: int = 10
@@ -88,7 +88,8 @@ class Sim:
             add_floor=False,
             memory="100M",
             solver="CG",
-            integrator="implicitfast",
+            integrator="discrete",
+            noslip_iterations=0,
             timestep=0.0005,
             tolerance=1e-8,
             iterations=200,
@@ -96,9 +97,6 @@ class Sim:
             statistic_extent=0.80,
         )
         spec.memory = 100 * 1024 * 1024
-        if hasattr(mj.mjtIntegrator, "mjINT_DISCRETE"):
-            spec.option.integrator = mj.mjtIntegrator.mjINT_DISCRETE
-            spec.option.noslip_iterations = 0
         spec.visual.global_.azimuth = 115
         spec.visual.global_.elevation = -20
 
@@ -157,7 +155,7 @@ class Sim:
             length=0.35,
             mass=0.08,
             radius=0.006,
-            edge_damping=0.01,
+            edge_damping=0.0,
             rgba=[0.98, 0.58, 0.12, 1.0],
             condim=3,
         )
@@ -167,9 +165,9 @@ class Sim:
             frame=spec.worldbody.add_frame(pos=[-0.38, -0.22, 0.42]),
         )
 
-        composite_cable = cable(
-            model_name="composite_cable",
-            prefix="composite_cable:",
+        elastic_cable = cable(
+            model_name="elastic_cable",
+            prefix="elastic_cable:",
             curve="0 s 0",
             n_segments=11,
             length=0.35,
@@ -179,7 +177,7 @@ class Sim:
             geom_condim=3,
         )
         spec.attach(
-            composite_cable,
+            elastic_cable,
             prefix="",
             frame=spec.worldbody.add_frame(pos=[-0.62, -0.22, 0.42]),
         )
@@ -193,18 +191,20 @@ class Sim:
             height=0.245,
             spacing=[0.035, 0.035, 0.035],
             mass=0.28,
-            radius=0.006,
+            radius=0.00085,
             pin_corner=False,
             rgba=[0.18, 0.78, 0.35, 0.82],
-            young=800.0,
-            poisson=0.2,
-            damping=0.1,
-            thickness=0.006,
+            # Aluminium-like sheet: 1.7 mm thick, with both membrane and
+            # bending elasticity. Its 0.28 kg mass matches this size/thickness.
+            young=70e9,
+            poisson=0.33,
+            damping=0.002,
+            thickness=0.0017,
             elastic2d="both",
             edge_equality=False,
             condim=3,
             friction=[0.6, 0.005, 0.0001],
-            solref=[0.0001, 0.1],
+            solref=[0.01, 1.0],
             solimp=[0.90, 0.95, 0.001, 0.5, 2.0],
             selfcollide="none",
         )
@@ -247,13 +247,14 @@ class Sim:
             radius=0.005,
             mass=0.18,
             equality=0,
+            elastic2d=3,
         )
 
         mesh.rgba = [0.988235294, 0.058823529, 0.752941176, 1.0]
-        mesh.young = 12_000.0
+        # A resilient shell rather than a floppy membrane: retain the tube
+        # cross-section and open hole when the torus lands on the floor.
+        mesh.young = 1_000_000.0
         mesh.poisson = 0.2
-        # Rayleigh damping scales the elastic stiffness. A value of 0.5 makes
-        # this mesh unstable at the 0.5 ms timestep on MuJoCo 3.11.
         mesh.damping = 0.01
         mesh.thickness = 0.010
         mesh.elastic2d = 3
@@ -320,10 +321,10 @@ class Sim:
                 f"{name} center [m]: "
                 f"({center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f})"
             )
-        if self.composite_cable_body_ids:
-            center = np.mean(self.d.xpos[self.composite_cable_body_ids], axis=0)
+        if self.elastic_cable_body_ids:
+            center = np.mean(self.d.xpos[self.elastic_cable_body_ids], axis=0)
             print(
-                "composite_cable center [m]: "
+                "elastic_cable center [m]: "
                 f"({center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f})"
             )
 
@@ -333,9 +334,10 @@ class Sim:
             "1D, 2D, 3D, and mesh flexes."
         )
         print(
-            "The gray cable uses the composite cable plugin for comparison. "
+            "The gray cable uses native rod bending and torsion for comparison. "
             "A force-limited slider pusher periodically presses the 3D cube. "
-            "The cloth uses softer contact and extra damping to reduce jitter. "
+            "The 2D sheet behaves like a thin metal plate, and the torus "
+            "retains its tubular shape. "
             "Close the viewer to exit."
         )
 

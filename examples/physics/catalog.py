@@ -20,7 +20,7 @@ class Example:
     azimuth: float | None = None
     elevation: float | None = None
     duration: float = 4
-    min_version: tuple[int, int, int] = (3, 3, 7)
+    min_version: tuple[int, int, int] = (4, 0, 0)
     keyframe: int | None = None
     track_body: str | None = None
 
@@ -75,7 +75,7 @@ EXAMPLES = {
         distance=0.65,
         azimuth=125,
         elevation=-30,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
         track_body="car",
     ),
     "dominos": Example(
@@ -87,7 +87,7 @@ EXAMPLES = {
         azimuth=100,
         elevation=-60,
         duration=8,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
     "flag": Example(
         "extended/flex/flag.xml",
@@ -97,7 +97,7 @@ EXAMPLES = {
         distance=2.6,
         azimuth=120,
         elevation=-20,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
     "trampoline": Example(
         "extended/flex/trampoline.xml",
@@ -107,7 +107,7 @@ EXAMPLES = {
         distance=3.5,
         azimuth=120,
         elevation=-25,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
     "soft_gripper": Example(
         "extended/flex/gripper_trilinear.xml",
@@ -118,7 +118,7 @@ EXAMPLES = {
         azimuth=120,
         elevation=-20,
         duration=5,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
     "pulley": Example(
         "extended/flex/pulley.xml",
@@ -128,7 +128,7 @@ EXAMPLES = {
         distance=4.2,
         azimuth=90,
         elevation=-70,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
         keyframe=0,
     ),
     "basket": Example(
@@ -140,18 +140,18 @@ EXAMPLES = {
         azimuth=125,
         elevation=-25,
         duration=3,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
     "coil": Example(
-        "extended/plugin/elasticity/coil.xml",
+        "extended/flex/coil.xml",
         "Free and actuated elastic coils.",
-        "One coil drops while a slider stretches the other through a cable plugin.",
+        "One native elastic rod coil drops while a slider stretches a clamped coil.",
         ("actuated",),
         lookat=(0, 0, 0.25),
         distance=1.5,
         azimuth=105,
         elevation=-20,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
     "gears": Example(
         "extended/plugin/sdf/gear.xml",
@@ -162,7 +162,7 @@ EXAMPLES = {
         distance=10,
         azimuth=90,
         elevation=-65,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
     "nut_bolt": Example(
         "extended/plugin/sdf/nutbolt.xml",
@@ -173,7 +173,7 @@ EXAMPLES = {
         distance=3.4,
         azimuth=125,
         elevation=-20,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
     "treadmill": Example(
         "extended/surfacevel/treadmill.xml",
@@ -184,7 +184,7 @@ EXAMPLES = {
         distance=4.8,
         azimuth=130,
         elevation=-25,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
     "twisty_cube": Example(
         "extended/cube/cube_3x3x3.xml",
@@ -195,9 +195,70 @@ EXAMPLES = {
         distance=0.20,
         azimuth=135,
         elevation=-25,
-        min_version=(3, 11, 0),
+        min_version=(4, 0, 0),
     ),
 }
+
+
+# MuJoCo 4 release examples, kept offline alongside the earlier gallery.
+EXAMPLES.update(
+    {
+        "plastic_wire": Example(
+            "plastic/wire.xml",
+            "Joint and tendon springs retain permanent bends.",
+            "Compare the elastic steel reference with brass and copper under falling loads.",
+            min_version=(4, 0, 0),
+        ),
+        "plastic_paper": Example(
+            "plastic/paper.xml",
+            "An inextensible shell retains creases.",
+            "The elastic cloth unfolds after passing through a ring; the paper keeps its folds.",
+            min_version=(4, 0, 0),
+        ),
+        "plastic_foil": Example(
+            "plastic/foil.xml",
+            "Thin sheets retain impact dents.",
+            "Separate stretching and bending yield thresholds control permanent craters.",
+            min_version=(4, 0, 0),
+        ),
+        "plastic_clay": Example(
+            "plastic/clay.xml",
+            "A press stamps a volumetric clay block.",
+            "Plastic strain retains the cross impression after the press lifts.",
+            min_version=(4, 0, 0),
+        ),
+        "plastic_roller": Example(
+            "plastic/roller.xml",
+            "A cogged roller stamps interpolated flex slabs.",
+            "Compare elastic rebound with plastic dents using trilinear cells.",
+            min_version=(4, 0, 0),
+        ),
+        "plastic_torsion": Example(
+            "plastic/torsion.xml",
+            "Twisted elastic and plastic bars release.",
+            "The elastic bar untwists; the plastic bar keeps a permanent rotation.",
+            min_version=(4, 0, 0),
+        ),
+        "speculative_newton": Example(
+            "speculative/newton.xml",
+            "Thin plates exchange momentum without tunneling.",
+            "Speculative contacts anticipate impact at a 4 ms timestep.",
+            min_version=(4, 0, 0),
+        ),
+        "speculative_chain": Example(
+            "speculative/chain.xml",
+            "Thin interlocking links fall onto a catch bar.",
+            "Predictive contacts keep fast-moving links from passing through one another.",
+            min_version=(4, 0, 0),
+        ),
+        "speculative_flipper": Example(
+            "speculative/flipper.xml",
+            "A fast bat strikes a spring-launched ball.",
+            "Speculative contacts account for rotational sweeps at a 10 ms timestep.",
+            min_version=(4, 0, 0),
+        ),
+    }
+)
 
 
 def configure_camera(name: str, model: mj.MjModel, camera: mj.MjvCamera) -> None:
@@ -225,20 +286,6 @@ def load_example(
         )
     path = Path(__file__).resolve().parent / "models" / example.path
     spec = mj.MjSpec.from_file(str(path))
-    if name == "coil" and not original_colors:
-        # The cable plugin otherwise replaces geom colors with its strain heatmap
-        # during scene updates. vmax affects visualization only.
-        for plugin in spec.plugins:
-            plugin.config = {**plugin.config, "vmax": "0"}
-    # Newer MuJoCo releases require the discrete integrator for implicit flex
-    # elasticity; 3.3.7 uses the integrator authored in the upstream model.
-    if name in ("jelly", "soft_gripper", "hammock") and hasattr(
-        mj.mjtIntegrator, "mjINT_DISCRETE"
-    ):
-        spec.option.integrator = mj.mjtIntegrator.mjINT_DISCRETE
-        if name == "soft_gripper":
-            # Interpolated flex nodes attached to moving bodies require CG.
-            spec.option.solver = mj.mjtSolver.mjSOL_CG
     model = spec.compile()
     if not original_colors:
         apply_palette(model, example.accents)

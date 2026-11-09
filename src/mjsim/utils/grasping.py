@@ -1,12 +1,17 @@
-from typing import List
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, List
 
 import numpy as np
-from robots.base_robot import BaseRobot
 from scipy.linalg import block_diag
 from scipy.optimize import OptimizeResult, linprog
-from utils.math import skew_symmetric
-from utils.mj import JointType, ObjType, get_pose, get_type
-from utils.physics import ContactModelType
+from spatialmath.base import skew as skew_symmetric
+
+from mjsim.utils.mj import JointType, ObjType, get_pose, get_type
+from mjsim.utils.physics import ContactModelType
+
+if TYPE_CHECKING:
+    from mjsim.base.robot import Robot as BaseRobot
 
 
 def compute_Ri_bar(contact_frame: np.ndarray) -> np.ndarray:
@@ -206,7 +211,8 @@ def compute_S(
         raise ValueError("mu and b must have matching shapes per contact")
 
     s_blocks = [
-        compute_Si(mu[i], b[i], ng, contact_type=contact_type) for i in range(mu.shape[0])
+        compute_Si(mu[i], b[i], ng, contact_type=contact_type)
+        for i in range(mu.shape[0])
     ]
     return block_diag(*s_blocks)
 

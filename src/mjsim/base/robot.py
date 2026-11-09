@@ -18,53 +18,9 @@ from mjsim.utils.mj import (
 
 
 def _dense_mass_matrix(model: mj.MjModel, data: mj.MjData) -> np.ndarray:
-    """Return the full dense generalized inertia matrix for the current state.
-
-    MuJoCo 3.8 introduced ``mjData.M`` in CSR-like sparse symmetric storage and
-    ``mju_sym2dense`` as the forward-compatible extraction path. The legacy
-    ``mjData.qM`` storage and ``mj_fullM(model, dst, data.qM)`` signature are
-    scheduled for removal; upcoming MuJoCo versions change ``mj_fullM`` to
-    ``mj_fullM(model, data, dst)``.
-
-    This helper prefers the new ``data.M`` path, then falls back to the future
-    ``mj_fullM`` signature, then to the legacy ``qM`` signature.
-    """
-    dense = np.zeros((model.nv, model.nv))
-
-    if hasattr(data, "M") and hasattr(mj, "mju_sym2dense"):
-        try:
-            mj.mju_sym2dense(
-                dense,
-                data.M,
-                model.M_rownnz,
-                model.M_rowadr,
-                model.M_colind,
-            )
-            return dense
-        except TypeError:
-            try:
-                # Some C-level documentation includes nv explicitly. Keep this
-                # branch for bindings that expose that spelling.
-                mj.mju_sym2dense(
-                    dense,
-                    data.M,
-                    model.nv,
-                    model.M_rownnz,
-                    model.M_rowadr,
-                    model.M_colind,
-                )
-                return dense
-            except TypeError:
-                pass
-
-    try:
-        mj.mj_fullM(model, data, dense)
-        return dense
-    except TypeError:
-        if not hasattr(data, "qM"):
-            raise
-
-    mj.mj_fullM(model, dense, data.qM)
+    """Return the generalized inertia matrix using MuJoCo 4's public API."""
+    dense = np.empty((model.nv, model.nv))
+    mj.mj_fullM(model, data, dense)
     return dense
 
 

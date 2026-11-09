@@ -176,6 +176,7 @@ def empty_scene(
     compiler_overrides: dict[str, Any] | None = None,
     visual_overrides: dict[str, dict[str, Any]] | None = None,
     size_overrides: dict[str, int] | None = None,
+    speculative: bool = False,
 ) -> mj.MjSpec:
     """
     Build a reusable base MuJoCo scene with the ``MjSpec`` API.
@@ -197,6 +198,8 @@ def empty_scene(
         sdf_initpoints: SDF collision initialization points.
         noslip_iterations: No-slip solver iterations.
         enable_multiccd: Enables MuJoCo's multi-CCD flag.
+        speculative: Enable predictive contacts for fast convex rigid geoms.
+            Also enables native CCD, which predictive contacts require.
         nativeccd: Enables native CCD when true and disables it when false. If
             omitted, ``multiccd`` is used for compatibility with the old API.
         compiler_angle: Angle unit for Euler values.
@@ -241,12 +244,15 @@ def empty_scene(
         spec.option.iterations = int(iterations)
 
     _set_multiccd(spec.option, enabled=enable_multiccd)
-    nativeccd_enabled = multiccd if nativeccd is None else nativeccd
+    if speculative and nativeccd is False:
+        raise ValueError("speculative contacts require nativeccd=True")
+    nativeccd_enabled = (multiccd or speculative) if nativeccd is None else nativeccd
     _set_disable_flag(
         spec.option,
         int(mj.mjtDisableBit.mjDSBL_NATIVECCD),
         disabled=not nativeccd_enabled,
     )
+    _set_enable_flag(spec.option, int(mj.mjtEnableBit.mjENBL_SPECULATIVE), speculative)
     _set_attrs(spec.option, option_overrides, "spec.option")
 
     spec.memory = _parse_memory(memory)
@@ -603,7 +609,6 @@ def _flex_grid_spec(
     mass: float,
     rgba: Sequence[float],
     radius: float,
-    joint_damping: float,
     inertiabox: float,
     friction: Sequence[float] | str | None,
     solref: Sequence[float] | str | None,
@@ -697,6 +702,9 @@ def _flex_grid_spec(
         flex.thickness = float(thickness)
     if dim == 3:
         flex.flatskin = 1
+    if young is not None and young > 0:
+        spec.option.integrator = mj.mjtIntegrator.mjINT_DISCRETE
+        spec.option.solver = mj.mjtSolver.mjSOL_CG
     return _ensure_to_xml_string(spec)
 
 
@@ -1119,238 +1127,6 @@ def deformable_mesh(
     return _spec_from_string(xml_str)
 
 
-def _composite_dlo(
-    model_name: str,
-    prefix: str,
-    curve: str,
-    count: List[int],
-    size: float,
-    initial: str,
-    twist: float,
-    bend: float,
-    vmax: float,
-    segment_size: float,
-    segment_geom_type: mj.mjtGeom,  # Using Any since mj.mjtGeom might not be available
-    **kwargs,
-) -> mj.MjSpec:  # Using Any for mj.MjSpec return type
-    """
-    Create a Deformable Linear Object (DLO) model specification using MuJoCo's elasticity plugin.
-
-    This function generates a cable-like deformable object composed of multiple segments
-    with configurable physical properties including elasticity, friction, and visual appearance.
-
-    Additional geom and joint arguments can be passed using prefixes:
-    - geom_* for geometry attributes (e.g., geom_solimp, geom_margin)
-    - joint_* for joint attributes (e.g., joint_stiffness, joint_axis)
-
-    For full information check the documentation:
-    https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-composite
-
-    Args:
-        model_name: Name of the model.
-        prefix: Prefix for composite elements in the model.
-        curve: Curve specification for the DLO shape (e.g., "0 s 0" for straight line).
-        count: Number of segments in each dimension as [x_count, y_count, z_count].
-        size: Overall size/length of the DLO.
-        initial: Initial condition specification ("free", "ball", "none").
-        twist: Twist stiffness coefficient for the DLO.
-        bend: Bending stiffness coefficient for the DLO.
-        vmax: Maximum velocity constraint. Use 0 for no constraint.
-        segment_size: Size parameter for each segment geometry.
-        segment_geom_type: Geometry type for segments (from mj.mjtGeom enum).
-        **kwargs: Additional arguments with prefixes:
-                - geom_*: Geometry attributes (e.g., geom_rgba, geom_mass, geom_friction)
-                - joint_*: Joint attributes (e.g., joint_damping, joint_armature)
-
-    Returns:
-        mj.MjSpec: MuJoCo model specification object.
-
-    Raises:
-        AssertionError: If input validation fails for any parameter.
-
-    Examples:
-        >>> # Create a basic DLO with required arguments only
-        >>> dlo_spec = test_dlo(
-        ...     model_name="rope",
-        ...     prefix="rope:",
-        ...     curve="0 s 0",
-        ...     count=[10, 1, 1],
-        ...     size=1.0,
-        ...     initial="free",
-        ...     twist=60000.0,
-        ...     bend=10000000.0,
-        ...     vmax=0,
-        ...     segment_size=0.002,
-        ...     segment_geom_type=mj.mjtGeom.mjGEOM_CAPSULE
-        ... )
-
-        >>> # Create a DLO with additional geom and joint arguments
-        >>> dlo_spec = test_dlo(
-        ...     model_name="advanced_rope",
-        ...     prefix="rope:",
-        ...     curve="0 s 0",
-        ...     count=[15, 1, 1],
-        ...     size=1.5,
-        ...     initial="free",
-        ...     twist=50000.0,
-        ...     bend=8000000.0,
-        ...     vmax=0,
-        ...     segment_size=0.003,
-        ...     segment_geom_type=mj.mjtGeom.mjGEOM_CAPSULE,
-        ...     geom_rgba=[0.8, 0.2, 0.2, 1.0],
-        ...     geom_mass="0.015",
-        ...     geom_friction="0.5 0.1 0.1",
-        ...     geom_condim="4",
-        ...     geom_solref="0.00002 0.8",
-        ...     geom_solimp="0.9 0.95 0.001",
-        ...     joint_damping="0.02",
-        ...     joint_armature="0.0005",
-        ...     joint_stiffness="100"
-        ... )
-    """
-    # Separate geom and joint arguments from kwargs
-    geom_args = {}
-    joint_args = {}
-    other_args = {}
-
-    for key, value in kwargs.items():
-        if key.startswith("geom_"):
-            geom_args[key[5:]] = value  # Remove 'geom_' prefix
-        elif key.startswith("joint_"):
-            joint_args[key[6:]] = value  # Remove 'joint_' prefix
-        else:
-            other_args[key] = value
-
-    if other_args:
-        print(f"Warning: Unprefixed kwargs will be ignored: {list(other_args.keys())}")
-
-    # Extract geometry type string from enum
-    geom_type = segment_geom_type.__str__().split("_")[-1].lower()
-
-    # Input validation
-    assert isinstance(model_name, str) and model_name, (
-        f"model_name must be a non-empty string, got {model_name=}"
-    )
-    assert isinstance(prefix, str) and prefix, (
-        f"prefix must be a non-empty string, got {prefix=}"
-    )
-    assert isinstance(curve, str) and curve, (
-        f"curve must be a non-empty string, got {curve=}"
-    )
-
-    # Validate count
-    assert isinstance(count, list) and len(count) == 3, (
-        f"count must be a list of 3 integers, got {count=}"
-    )
-    assert all(isinstance(x, int) and x > 0 for x in count), (
-        f"All count values must be positive integers, got {count=}"
-    )
-
-    # Validate numeric parameters
-    assert isinstance(size, (int, float)) and size > 0, (
-        f"size must be positive, got {size=}"
-    )
-    assert isinstance(segment_size, (int, float)) and segment_size > 0, (
-        f"segment_size must be positive, got {segment_size=}"
-    )
-    assert isinstance(twist, (int, float)) and twist >= 0, (
-        f"twist must be non-negative, got {twist=}"
-    )
-    assert isinstance(bend, (int, float)) and bend >= 0, (
-        f"bend must be non-negative, got {bend=}"
-    )
-    assert isinstance(vmax, (int, float)) and vmax >= 0, (
-        f"vmax must be non-negative, got {vmax=}"
-    )
-
-    # Validate initial condition
-    valid_initial_conditions = {"free", "ball", "none"}
-    assert isinstance(initial, str), f"initial must be a string, got {initial=}"
-    if initial not in valid_initial_conditions:
-        print(
-            f"Warning: {initial=} is not a common initial condition. "
-            f"Common values are: {valid_initial_conditions}"
-        )
-
-    # Validate geometry type
-    valid_geom_types = {"capsule", "box", "sphere", "cylinder", "ellipsoid", "mesh"}
-    assert geom_type in valid_geom_types, (
-        f"Invalid geometry type: {geom_type}. Must be one of {valid_geom_types}"
-    )
-
-    # Create XML structure using ElementTree
-    mujoco = ET.Element("mujoco", model=model_name)
-
-    # Add extension
-    extension = ET.SubElement(mujoco, "extension")
-    ET.SubElement(extension, "plugin", plugin="mujoco.elasticity.cable")
-
-    # Add worldbody
-    worldbody = ET.SubElement(mujoco, "worldbody")
-
-    # Create composite element
-    composite = ET.SubElement(
-        worldbody,
-        "composite",
-        prefix=prefix,
-        type="cable",
-        curve=curve,
-        count=" ".join(str(x) for x in count),
-        size=str(size),
-        initial=initial,
-    )
-
-    # Add plugin to composite
-    plugin = ET.SubElement(composite, "plugin", plugin="mujoco.elasticity.cable")
-    ET.SubElement(plugin, "config", key="twist", value=str(twist))
-    ET.SubElement(plugin, "config", key="bend", value=str(bend))
-    ET.SubElement(plugin, "config", key="vmax", value=str(vmax))
-
-    # Create joint attributes with defaults and additional joint_args
-    joint_attribs = {
-        "kind": "main",
-        "damping": str(joint_args.get("damping", "0.01")),  # Default value
-        "armature": str(joint_args.get("armature", "0.001")),  # Default value
-    }
-    # Add all other joint arguments (excluding already used ones)
-    for key, value in joint_args.items():
-        if key not in ["damping", "armature"]:
-            joint_attribs[key] = str(value)
-
-    ET.SubElement(composite, "joint", **joint_attribs)
-
-    # Create geom attributes with defaults and additional geom_args
-    geom_attribs = {
-        "type": geom_type,
-        "size": str(segment_size),
-        "rgba": " ".join(
-            str(x) for x in geom_args.get("rgba", [0.2, 0.2, 0.2, 1.0])
-        ),  # Default
-        "mass": str(geom_args.get("mass", "0.02")),  # Default
-        "friction": geom_args.get("friction", "0.3 0.3 0.3"),  # Default
-        "condim": str(geom_args.get("condim", 4)),  # Default
-        "solref": geom_args.get("solref", "0.00001 1"),  # Default
-    }
-    # Add all other geom arguments (excluding already used ones)
-    for key, value in geom_args.items():
-        if key not in ["rgba", "mass", "friction", "condim", "solref"]:
-            geom_attribs[key] = str(value)
-
-    ET.SubElement(composite, "geom", **geom_attribs)
-
-    # Convert to string with pretty printing
-    try:
-        ET.indent(mujoco)  # Python 3.9+
-        xml_str = ET.tostring(mujoco, encoding="unicode", method="xml")
-    except AttributeError:
-        # Fallback for Python < 3.9
-        xml_str = minidom.parseString(
-            ET.tostring(mujoco, encoding="unicode")
-        ).toprettyxml(indent="  ")
-
-    return _spec_from_string(xml_str)
-
-
 def dlo(
     model_name: str = "rope",
     prefix: Optional[str] = None,
@@ -1365,15 +1141,15 @@ def dlo(
     solref: Sequence[float] | str | None = None,
     solimp: Sequence[float] | str | None = None,
     selfcollide: str = "none",
-    edge_damping: float = 0.001,
+    edge_damping: float = 0.0,
     edge_stiffness: float | None = None,
     damping: float | None = None,
 ) -> mj.MjSpec:
     """
     Create a deformable linear object using MuJoCo's ``make_flex`` grid API.
 
-    This is the make-flex DLO helper. The composite cable plugin remains
-    available through :func:`cable`.
+    This is a flexible string with edge constraints. For bending and torsional
+    elasticity, use the native rod helper :func:`cable`.
     """
     assert n_segments > 1, f"n_segments should be above 1, got {n_segments=}"
     assert length > 0, f"length should be above 0, got {length=}"
@@ -1400,7 +1176,6 @@ def dlo(
         mass=mass,
         rgba=rgba,
         radius=radius,
-        joint_damping=0.0,
         inertiabox=max(radius, 0.001),
         friction=friction,
         solref=solref,
@@ -1439,9 +1214,8 @@ def dqo(
     This function generates a cloth-like deformable object composed of a grid of segments
     with configurable physical properties including stretch, bend, and shear stiffness.
 
-    Additional geom and joint arguments can be passed using prefixes:
-    - geom_* for geometry attributes (e.g., geom_solimp, geom_margin)
-    - joint_* for joint attributes (e.g., joint_stiffness, joint_axis)
+    Additional contact/appearance arguments use geom_* prefixes.
+    Set damping for Rayleigh elastic damping; joint_* options are unsupported.
 
     Args:
         model_name: Name of the model.
@@ -1454,9 +1228,8 @@ def dqo(
         shear: Shear stiffness coefficient for the cloth.
         segment_size: Size parameter for each segment geometry (thickness for cloth).
         segment_geom_type: Geometry type for segments (from mj.mjtGeom enum).
-        **kwargs: Additional arguments with prefixes:
-                - geom_*: Geometry attributes (e.g., geom_rgba, geom_mass, geom_friction)
-                - joint_*: Joint attributes (e.g., joint_damping, joint_armature)
+        **kwargs: Additional geom_* contact/appearance parameters and flex
+            elasticity parameters such as damping.
 
     Returns:
         mj.MjSpec: MuJoCo model specification object.
@@ -1497,8 +1270,7 @@ def dqo(
         ...     geom_condim="4",
         ...     geom_solref="0.0001 0.9",
         ...     geom_solimp="0.8 0.9 0.001",
-        ...     joint_damping="0.1",
-        ...     joint_armature="0.0001"
+        ...     damping=0.002
         ... )
     """
     # Separate geom, joint, and flex arguments from kwargs
@@ -1513,6 +1285,11 @@ def dqo(
             joint_args[key[6:]] = value  # Remove 'joint_' prefix
         else:
             flex_args[key] = value
+
+    if joint_args:
+        raise ValueError(
+            "Elastic flexes do not support joint_* options; use damping for Rayleigh elastic damping"
+        )
 
     # Extract geometry type string from enum
     geom_type = segment_geom_type.__str__().split("_")[-1].lower()
@@ -1600,7 +1377,6 @@ def dqo(
         mass=total_mass,
         rgba=rgba,
         radius=float(flex_args.pop("radius", segment_size)),
-        joint_damping=float(joint_args.get("damping", 0.05)),
         inertiabox=float(flex_args.pop("inertiabox", max(segment_size, 0.001))),
         friction=geom_args.get("friction", "1.0 0.3 0.1"),
         solref=geom_args.get("solref", "0.0001 0.9"),
@@ -1610,7 +1386,7 @@ def dqo(
         gap=flex_args.pop("gap", None),
         selfcollide=flex_args.pop("selfcollide", "none"),
         edge_equality=bool(flex_args.pop("edge_equality", False)),
-        edge_damping=flex_args.pop("edge_damping", 0.001),
+        edge_damping=flex_args.pop("edge_damping", 0.0),
         edge_stiffness=flex_args.pop("edge_stiffness", None),
         damping=flex_args.pop("damping", None),
         young=flex_args.pop("young", max(stretch, shear)),
@@ -1650,83 +1426,150 @@ def cable(
     segment_size: float = 0.002,
     mass: float = 0.2,
     initial: str = "free",
+    *,
+    points: Sequence[Sequence[float]] | None = None,
+    damping: float = 0.002,
     **kw_args,
 ) -> mj.MjSpec:
+    """Create a MuJoCo 4 native elastic rod with inextensible edges.
+
+    ``n_segments`` is the number of vertices (at least three). ``bend`` and
+    ``twist`` specify Young's and shear moduli in Pa. ``initial='none'`` clamps
+    the first edge; ``'ball'`` pins the first vertex; ``'free'`` leaves it free.
+    Straight axis curves such as ``'0 s 0'`` run from zero to ``length``.
+    Supply an (N, 3) ``points`` array for a curved, stress-free reference shape.
+
+    The flex is named ``prefix.rstrip(':/')``. Vertex bodies are ``<name>_<i>``;
+    twist bodies/joints are ``<name>_twist_0`` through ``<name>_twist``.
+    Endpoint sites retain ``<prefix>S_first`` and ``<prefix>S_last`` names.
+    Sites follow vertex translation; use twist joints to apply rod torsion.
+    Parent scenes must use ``integrator='discrete', noslip_iterations=0``.
+    State snapshots must include ``mjSTATE_PLASTIC`` (or ``mjSTATE_INTEGRATION``).
+
+    Legacy ``geom_rgba`` and contact attributes remain accepted.
+    Use ``damping`` for Rayleigh elastic damping; nonzero ``joint_damping``
+    is incompatible with native elastic flexes and is rejected.
+    Plugin stress coloring (``vmax``) and other legacy joint/geom options are
+    unsupported and rejected instead of silently changing their meaning.
     """
-    Create a cable model with minimal required parameters.
-
-    This is a simplified interface for creating cable-like deformable linear objects
-    with sensible defaults. Additional parameters can be passed through kw_args
-    using geom_* and joint_* prefixes for fine-grained control.
-
-    Args:
-        model_name: Name of the cable model. Defaults to "cable".
-        prefix: Prefix for composite elements. If None, uses "model_name:".
-        curve: Curve specification for cable shape. Defaults to "0 s 0" (straight line).
-        n_segments: Number of segments in the cable. Must be > 0. Defaults to 10.
-        twist: Twist stiffness coefficient. Defaults to 60000.0.
-        bend: Bending stiffness coefficient. Defaults to 10000000.0.
-        vmax: Maximum velocity constraint. Use 0 for no constraint. Defaults to 0.
-        length: Total length of the cable. Must be > 0. Defaults to 1.
-        segment_size: Radius of each cable segment. Defaults to 0.002.
-        mass: Total mass of the cable. Must be > 0. Defaults to 0.2.
-        initial: Initial condition. Defaults to "free".
-        **kw_args: Additional arguments passed to test_dlo with geom_* and joint_* prefixes.
-                   Examples: geom_rgba, geom_friction, joint_damping, etc.
-
-    Returns:
-        mj.MjSpec: MuJoCo model specification object.
-
-    Raises:
-        AssertionError: If input validation fails.
-
-    Examples:
-        >>> # Create a basic cable with default parameters
-        >>> cable_spec = cable()
-
-        >>> # Create a custom cable
-        >>> cable_spec = cable(
-        ...     model_name="my_cable",
-        ...     n_segments=20,
-        ...     length=2.0,
-        ...     mass=0.3,
-        ...     twist=50000.0
-        ... )
-
-        >>> # Create a cable with custom appearance and physics
-        >>> cable_spec = cable(
-        ...     n_segments=15,
-        ...     length=1.5,
-        ...     geom_rgba=[0.8, 0.2, 0.2, 1.0],
-        ...     geom_friction="0.5 0.1 0.1",
-        ...     joint_damping="0.02",
-        ...     geom_solimp="0.9 0.95 0.001"
-        ... )
-    """
-    # Input validation
-    assert n_segments > 0, f"n_segments should be above 0, got {n_segments=}"
-    assert length > 0, f"length should be above 0, got {length=}"
-    assert mass > 0, f"mass should be above 0, got {mass=}"
-
-    segment_mass = mass / n_segments
+    if n_segments < 3 or length <= 0 or mass <= 0 or segment_size <= 0:
+        raise ValueError(
+            "cable requires n_segments >= 3 and positive length, mass, radius"
+        )
+    if bend <= 0 or twist < 0 or damping < 0:
+        raise ValueError(
+            "bend must be positive; twist and damping must be non-negative"
+        )
+    if vmax != 0:
+        raise ValueError(
+            "MuJoCo 4 native rods do not support plugin vmax stress coloring"
+        )
+    if initial not in {"free", "ball", "none"}:
+        raise ValueError("initial must be 'free', 'ball', or 'none'")
     prefix = f"{model_name}:" if prefix is None else prefix
+    name = _safe_mj_name(prefix.rstrip(":/"))
+    if points is None:
+        axes = curve.split()
+        if (
+            len(axes) != 3
+            or axes.count("s") != 1
+            or any(x not in {"0", "s"} for x in axes)
+        ):
+            raise ValueError(
+                "Use points=(N, 3) for curved rods; curve supports straight axis curves"
+            )
+        xyz = np.zeros((n_segments, 3))
+        xyz[:, axes.index("s")] = np.linspace(0, length, n_segments)
+    else:
+        xyz = np.asarray(points, dtype=float)
+        if (
+            xyz.ndim != 2
+            or xyz.shape[1] != 3
+            or len(xyz) < 3
+            or not np.isfinite(xyz).all()
+        ):
+            raise ValueError("points must be a finite (N, 3) array with N >= 3")
+        if np.any(np.linalg.norm(np.diff(xyz, axis=0), axis=1) <= 0):
+            raise ValueError("Adjacent rod points must be distinct")
+    if float(kw_args.pop("joint_damping", 0.0)) != 0:
+        raise ValueError(
+            "Native elastic rods do not support joint_damping; use damping for Rayleigh elastic damping"
+        )
+    rgba = kw_args.pop("geom_rgba", (0.2, 0.2, 0.2, 1))
+    contact = {}
+    for key in (
+        "friction",
+        "condim",
+        "solref",
+        "solimp",
+        "margin",
+        "gap",
+        "contype",
+        "conaffinity",
+        "priority",
+        "solmix",
+    ):
+        value = kw_args.pop(f"geom_{key}", None)
+        if value is not None:
+            contact[key] = value
+    if kw_args:
+        raise TypeError(
+            f"Unsupported native cable options: {', '.join(sorted(kw_args))}"
+        )
 
-    return _composite_dlo(
-        model_name=model_name,
-        prefix=prefix,
-        curve=curve,
-        count=[n_segments, 1, 1],
-        size=length,
-        initial=initial,
-        twist=twist,
-        bend=bend,
-        vmax=vmax,
-        segment_size=segment_size,
-        segment_geom_type=mj.mjtGeom.mjGEOM_CAPSULE,  # Default to capsule geometry
-        geom_mass=str(segment_mass),
-        geom_rgba=kw_args.pop("geom_rgba", [0.2, 0.2, 0.2, 1]),  # Default color
-        **kw_args,  # Pass any additional geom_*/joint_* arguments
+    def xml_value(value):
+        return (
+            value
+            if isinstance(value, str)
+            else " ".join(map(str, np.atleast_1d(value)))
+        )
+
+    root = ET.Element("mujoco", model=model_name)
+    ET.SubElement(
+        root, "option", integrator="discrete", solver="CG", noslip_iterations="0"
     )
+    world = ET.SubElement(root, "worldbody")
+    rod = ET.SubElement(
+        world,
+        "flexcomp",
+        name=name,
+        type="direct",
+        dim="1",
+        point=xml_value(xyz.ravel()),
+        element=xml_value(
+            np.column_stack((np.arange(len(xyz) - 1), np.arange(1, len(xyz)))).ravel()
+        ),
+        radius=str(segment_size),
+        mass=str(mass),
+        rgba=xml_value(rgba),
+    )
+    ET.SubElement(rod, "edge", equality="true")
+    ET.SubElement(
+        rod, "elasticity", young=str(bend), shear=str(twist), damping=str(damping)
+    )
+    ET.SubElement(
+        rod,
+        "contact",
+        selfcollide="none",
+        **{k: xml_value(v) for k, v in contact.items()},
+    )
+    if initial != "free":
+        ET.SubElement(rod, "pin", id="0 1" if initial == "none" else "0")
+    spec = _spec_from_string(ET.tostring(root, encoding="unicode"))
+    for i, label in ((0, "first"), (len(xyz) - 1, "last")):
+        body = spec.body(f"{name}_{i}")
+        if body is None:  # Pinned vertices attach directly to world.
+            body = spec.worldbody
+            position = xyz[i]
+        else:
+            position = [0, 0, 0]
+        body.add_site(
+            name=f"{prefix}S_{label}",
+            pos=position,
+            size=[segment_size],
+            rgba=[0, 0, 0, 0],
+        )
+    return _ensure_to_xml_string(spec)
 
 
 def cloth(
@@ -1778,7 +1621,7 @@ def cloth(
 
     radius = float(kwargs.pop("radius", 0.001))
     edge_equality = bool(kwargs.pop("edge_equality", True))
-    edge_damping = float(kwargs.pop("edge_damping", 0.01))
+    edge_damping = float(kwargs.pop("edge_damping", 0.0))
     # MuJoCo 3.14 disallows combining flex constraints with nonzero young.
     young = float(kwargs.pop("young", 0.0 if edge_equality else max(stretch, shear)))
     poisson = float(kwargs.pop("poisson", 0.1))
@@ -1810,7 +1653,6 @@ def cloth(
         mass=mass,
         rgba=rgba,
         radius=radius,
-        joint_damping=0.0,
         inertiabox=float(inertiabox),
         friction=friction,
         solref=solref,
@@ -1884,7 +1726,6 @@ def jello(
         mass=mass,
         rgba=rgba,
         radius=radius,
-        joint_damping=0.0,
         inertiabox=max(radius, 0.005),
         friction=None,
         solref=solref,
@@ -1978,18 +1819,18 @@ def replicate(
     **kwargs,
 ) -> mj.MjSpec:
     """
-    Create a replicated geometry model using MuJoCo's replicate composite type.
+    Create a replicated geometry model using MuJoCo's ``replicate`` element.
 
     This function generates multiple copies of a geometry with specified separation
     and transformation between each copy.
 
     Args:
         model_name: Name of the model.
-        prefix: Prefix for composite elements.
+        prefix: Prefix for generated geometry names.
         count: Number of replications.
-        sep: Separation between replications (space-separated XYZ or "hole:prefix").
+        sep: XYZ offset between replications; a blank string means zero offset.
         euler: Euler angles for each replication (space-separated XYZ rotations in degrees).
-        pos: Initial position of the composite.
+        pos: Initial position of the replicated group.
         geom_type: Type of geometry ("box", "sphere", "capsule", "cylinder", "ellipsoid").
         geom_size: Size parameters for the geometry.
         geom_pos: Position offset for the geometry relative to its body.
@@ -2011,7 +1852,7 @@ def replicate(
         >>> # Create a spiral pattern
         >>> spiral = replicate(
         ...     count=20,
-        ...     sep="hole:spiral",
+        ...     sep="0 0 0.01",
         ...     euler="0 0 18",  # 18 degree rotation each step
         ...     geom_type="capsule",
         ...     geom_size="0.005 0.02",
@@ -2028,17 +1869,14 @@ def replicate(
     mujoco = ET.Element("mujoco", model=model_name)
     worldbody = ET.SubElement(mujoco, "worldbody")
 
-    # Create body with initial position
-    body = ET.SubElement(worldbody, "body", pos=pos, euler=euler)
+    # Keep the initial pose separate from the incremental rotation.
+    body = ET.SubElement(worldbody, "body", pos=pos)
 
-    # Create composite with replicate type
-    composite = ET.SubElement(
+    replicas = ET.SubElement(
         body,
-        "composite",
-        type="replicate",
-        prefix=prefix,
+        "replicate",
         count=str(count),
-        sep=sep,
+        offset=sep.strip() or "0 0 0",
         euler=euler,
     )
 
@@ -2055,7 +1893,7 @@ def replicate(
     for key, value in kwargs.items():
         geom_attribs[key] = str(value)
 
-    ET.SubElement(composite, "geom", **geom_attribs)
+    ET.SubElement(replicas, "geom", name=prefix, **geom_attribs)
 
     # Convert to string with pretty printing
     try:
@@ -2119,8 +1957,8 @@ def pipe(
         model_name=model_name,
         prefix="pipe:",
         count=count,
-        sep="hole:pipe",  # Circular hole pattern
-        euler="0 0 0",  # No additional rotation between segments
+        sep="0 0 0",  # Rotate around the common center.
+        euler=f"0 0 {360 / count}",
         pos="0 0 0",
         geom_type="box",
         geom_size=geom_size,

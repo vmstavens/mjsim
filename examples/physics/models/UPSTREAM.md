@@ -1,70 +1,31 @@
 # Upstream MuJoCo models
 
-The seven physics gallery models are vendored, unmodified, from
-[google-deepmind/mujoco, release 3.3.7](https://github.com/google-deepmind/mujoco/tree/3.3.7/model),
-commit `f1d45bd5422c74beddfb0d1deb590a02583d21de`.
-They work offline and require no downloaded meshes or robot descriptions.
+The bundled gallery XML models and their supporting assets are copied from
+[google-deepmind/mujoco release 4.0.0](https://github.com/google-deepmind/mujoco/tree/4.0.0/model).
+The repository layout preserves relative includes, attachments, and asset paths.
+The models run offline without robot-description downloads.
 
-The directory structure preserves upstream relative includes and model attachments:
+All vendored files retain their upstream copyright notices and are covered by
+the Apache License 2.0 in [LICENSE](LICENSE). The rest of mjsim retains its own
+license. The Python loader adds demonstration actuator inputs, initial conditions,
+and an optional rendering palette; physics parameters come from the release XML.
 
-| Gallery entry | Upstream file under `model/` | Supporting files |
-| --- | --- | --- |
-| `newton_cradle` | `replicate/newton_cradle.xml` | — |
-| `balloons` | `balloons/balloons.xml` | — |
-| `slider_crank` | `slider_crank/slider_crank.xml` | — |
-| `muscle_arm` | `tendon_arm/arm26.xml` | — |
-| `adhesion` | `adhesion/active_adhesion.xml` | — |
-| `hammock` | `hammock/hammock.xml` | `humanoid/humanoid.xml` |
-| `jelly` | `flex/jelly.xml` | `flex/scene.xml` |
-
-These files are licensed under the Apache License 2.0, included in [LICENSE](LICENSE).
-Existing upstream copyright and license comments are retained. This license applies
-to the vendored files; the rest of mjsim retains its existing license.
-
-The Python gallery adds demonstration actuator inputs and applies a rendering-only
-palette at load time. On newer MuJoCo versions exposing `mjINT_DISCRETE`, its loader
-switches jelly to that integrator, as required for implicit flex elasticity. On
-3.3.7 it uses the original `implicitfast` setting. The XML files stay unchanged.
-
-## Luggage carousel (MuJoCo 3.11+)
-
-`surfacevel/carousel.xml` is vendored unchanged from
-[MuJoCo release 3.14.0](https://github.com/google-deepmind/mujoco/blob/3.14.0/model/surfacevel/carousel.xml),
-under the same Apache 2.0 license above. It is the luggage-carousel surface-velocity
-demonstration associated with the [reference video](https://www.youtube.com/watch?v=PdSdrqhSiZA).
-It has no external assets. The bundled model was compiled and simulated with
-MuJoCo 3.11.0; the standalone conveyor launcher checks for native `surfacevel`
-support and applies only the palette and user-selected surface speeds.
-
-## Expanded gallery (MuJoCo 3.11+)
-
-The `extended/` directory is vendored unchanged from
-[MuJoCo release 3.11.0](https://github.com/google-deepmind/mujoco/tree/3.11.0/model),
-commit `b85fdca54f0e0038b804af146a0b4e94199e00d0`, under the same Apache 2.0
-license above. It preserves the original directory structure and all required
-includes, the gripper cap mesh, and cube textures. No runtime downloads are needed.
-The current main catalogue was reviewed at commit
-`897e3fcb19bd85623c8dffa0d645255c00cd7931` when selecting these systems.
-
-| Gallery name | File beneath `extended/` |
+| Local directory | Upstream directory under `model/` |
 | --- | --- |
-| `car` | `car/car.xml` |
-| `dominos` | `sleep/dominos.xml` |
-| `flag` | `flex/flag.xml` |
-| `trampoline` | `flex/trampoline.xml` |
-| `soft_gripper` | `flex/gripper_trilinear.xml` |
-| `pulley` | `flex/pulley.xml` |
-| `basket` | `flex/basket.xml` |
-| `coil` | `plugin/elasticity/coil.xml` |
-| `gears` | `plugin/sdf/gear.xml` |
-| `nut_bolt` | `plugin/sdf/nutbolt.xml` |
-| `treadmill` | `surfacevel/treadmill.xml` |
-| `twisty_cube` | `cube/cube_3x3x3.xml` |
+| `replicate`, `balloons`, `slider_crank`, `tendon_arm`, `adhesion` | Same path |
+| `hammock`, `humanoid`, `flex` | Same path |
+| `surfacevel` | `surfacevel` |
+| `extended/car`, `extended/sleep`, `extended/flex`, `extended/cube` | Corresponding directory without `extended/` |
+| `extended/plugin/sdf` | `plugin/sdf` |
+| `plastic` | `plastic` (all six release examples and README) |
+| `speculative` | `speculative` (all three release examples and README) |
 
-Python adds wheel/face motor inputs, gripper and coil trajectories, a pulley
-keyframe, and an initial nut spin. It also applies the shared palette and camera
-framing. In themed coil views, Python disables the cable plugin’s strain heatmap
-(`vmax=0`) so it cannot replace the palette during rendering. This changes only
-visualization. The source XML and image assets remain unmodified. On versions exposing
-`mjINT_DISCRETE`, the soft-gripper loader selects that integrator for implicit
-flex elasticity, matching the jelly compatibility handling.
+The coil model moved from `extended/plugin/elasticity/coil.xml` to
+`extended/flex/coil.xml`, following the upstream migration from the removed cable
+plugin to native 1D flex elasticity. Gallery commands still use the name `coil`.
+The unused historical `extended/plugin/elasticity/scene.xml` is retained from
+MuJoCo 3.11.0 for old relative links; it is not loaded by the gallery.
+
+The 4.0 refresh also includes updated tendon side sites, flex elastic constants,
+integrators, and solver choices. Earlier previews in `examples/media` were
+rendered with older versions and may differ slightly from current simulation.

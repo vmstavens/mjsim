@@ -24,36 +24,75 @@ Run `physics_gallery.py <name>` or pass `--list` for the physical systems.
 
 | Name | Required MuJoCo |
 | --- | --- |
-| `newton_cradle` | 3.3.7+ |
-| `balloons` | 3.3.7+ |
-| `slider_crank` | 3.3.7+ |
-| `muscle_arm` | 3.3.7+ |
-| `adhesion` | 3.3.7+ |
-| `hammock` | 3.3.7+ |
-| `jelly` | 3.3.7+ |
-| `car` | 3.11.0+ |
-| `dominos` | 3.11.0+ |
-| `flag` | 3.11.0+ |
-| `trampoline` | 3.11.0+ |
-| `soft_gripper` | 3.11.0+ |
-| `pulley` | 3.11.0+ |
-| `basket` | 3.11.0+ |
-| `coil` | 3.11.0+ |
-| `gears` | 3.11.0+ |
-| `nut_bolt` | 3.11.0+ |
-| `treadmill` | 3.11.0+ |
-| `twisty_cube` | 3.11.0+ |
+| `newton_cradle` | 4.0.0+ |
+| `balloons` | 4.0.0+ |
+| `slider_crank` | 4.0.0+ |
+| `muscle_arm` | 4.0.0+ |
+| `adhesion` | 4.0.0+ |
+| `hammock` | 4.0.0+ |
+| `jelly` | 4.0.0+ |
+| `car` | 4.0.0+ |
+| `dominos` | 4.0.0+ |
+| `flag` | 4.0.0+ |
+| `trampoline` | 4.0.0+ |
+| `soft_gripper` | 4.0.0+ |
+| `pulley` | 4.0.0+ |
+| `basket` | 4.0.0+ |
+| `coil` | 4.0.0+ |
+| `gears` | 4.0.0+ |
+| `nut_bolt` | 4.0.0+ |
+| `treadmill` | 4.0.0+ |
+| `twisty_cube` | 4.0.0+ |
 
-The original seven models are pinned to MuJoCo 3.3.7; the expanded selection is
-pinned to 3.11.0. The current upstream catalogue was reviewed across vehicle,
-contact, deformable, mechanism, and plugin examples. Models requiring newer
-features are checked by the loader before compilation. Assets are bundled for
+All bundled gallery models are pinned to MuJoCo 4.0.0. Assets are bundled for
 offline use. Sources and Apache 2.0 licensing are in
 [UPSTREAM.md](physics/models/UPSTREAM.md).
 
 Use `--manual` for viewer actuator controls, `--original-colors` to compare the
 upstream appearance, and `--headless --duration 5` for a simulation-only rollout.
 Close the native viewer to exit. Double-click and Ctrl-drag to perturb a body.
+
+## MuJoCo 4 features
+
+```bash
+uv run python examples/rod_twist.py
+uv run python examples/rod_twist.py --headless
+uv run python examples/batch_simulation.py --nsim 64 --steps 500 --threads 4
+uv run python examples/physics_gallery.py plastic_wire --original-colors
+uv run python examples/physics_gallery.py speculative_newton --headless --duration 2
+```
+
+`rod_twist.py` builds a clamped native rod, drives its terminal material-frame
+hinge, and demonstrates exact state replay including `mjData.plastic`. The
+headless mode asserts that the restored trajectory matches. `batch_simulation.py`
+uses `mujoco.batch.Batch`, named joint views, and a thread pool to run independent
+simulations; it compares each result to a scalar MuJoCo loop.
+
+| Gallery entry | Feature to inspect |
+| --- | --- |
+| `plastic_wire` | Joint and tendon `springyield` shifts the spring reference permanently |
+| `plastic_paper` | Bending yield preserves folds in an inextensible shell |
+| `plastic_foil` | Separate stretching and bending yield thresholds leave impact dents |
+| `plastic_clay` | Volumetric plastic strain keeps a stamped cross impression |
+| `plastic_roller` | Interpolated flex cells retain roller impressions |
+| `plastic_torsion` | Plastic torsion remains after the drive slips free |
+| `speculative_newton` | Thin-plate impacts at a 4 ms timestep |
+| `speculative_chain` | Fast interlocking links retain contact |
+| `speculative_flipper` | Rotational collision sweeps at a 10 ms timestep |
+
+Use `--original-colors` to retain the upstream material distinctions for elastic
+and plastic comparisons. All entries accept `--headless --duration 2`. The clay
+and shell examples have thousands of degrees of freedom and can run slower than
+real time. To compare conventional contacts, remove the speculative enable bit
+from a loaded model before stepping:
+
+```python
+model.opt.enableflags &= ~mujoco.mjtEnableBit.mjENBL_SPECULATIVE
+```
+
+New scenes can enable the feature with `empty_scene(speculative=True)`.
+See the [package migration notes](../README.md#migrating-from-mjsim-01) and
+[official release notes](https://mujoco.readthedocs.io/en/4.0.0/changelog.html).
 
 ## Rendering the GIF grid
 
@@ -122,17 +161,31 @@ MUJOCO_GL=egl uv run --with pillow python examples/render_physics_gifs.py mj_xml
 
 The gripper uses `robot_descriptions` and may download its model on first use.
 
+The drape preview uses ordinary frictional solver contacts, with elastic stiffness
+handled by the `discrete` integrator. Passive flex contacts are frictionless and
+will not hold sheets on a fixed sphere. Run either embedded scene directly:
+
+```bash
+uv run python examples/mj_xml.py drape
+uv run python examples/mj_xml.py bags --headless --duration 0.1
+```
+
+The legacy `mj_tendon_finger.py` filename now reports its actual bunny-press
+scene; use the viewer's `press` actuator slider. The numerical DMP example
+integrates at 2 ms independently of its demonstration sampling interval.
+
+
 ## More physical systems and deformables
 
 | Script | Simulation | Notes |
 | --- | --- | --- |
 | `conveyor_belt.py` | Three feeder belts deliver six bags to a circular luggage carousel using native surface-velocity contact friction | MuJoCo 3.11+; Space reverses, P stops/starts surfaces, Backspace resets; `--headless`. |
 | `particle_container.py` | Damped particles stirred by a moving paddle | `--headless`; `--particles` selects approximate count. |
-| `mk_flex.py` | Rope, cloth, soft cube, custom mesh flex, and composite cable | `--headless`; requires the newer `make_flex` API (MuJoCo 3.10+). |
+| `mk_flex.py` | Rope, cloth, soft cube, custom mesh flex, and native elastic cable | `--headless`; uses the `make_flex` API and native rod elasticity (MuJoCo 4.x). |
 | `velux_sealing.py` | Flexible sealing strip built from repeated mesh segments | `--headless`; bundled profile mesh. |
 | `earth_digger.py` | Excavator linkage with slider-crank hydraulic transmissions | Native viewer. |
 | `mj_tendon_finger.py` | Experimental deformable bunny under an actuated press | Native viewer; newer flex features. |
-| `mj_xml.py` | Inline XML experiments for bags and draped deformables | Edit the selected XML in the script; newer flex features. |
+| `mj_xml.py` | Inline XML experiments for bags and draped deformables | Select `drape` (default) or `bags`; `--headless --duration 3`. |
 | `modelling.py` | Robotiq gripper, bunny, cable, cloth, jello, and free ball | Downloads robot descriptions when uncached. |
 | `deformable_assets.py` | Generate cable and cloth specs and export XML | Utility example. |
 | `dlo-insert.py` | Cable insertion into a pipe | Viser browser viewer. |
@@ -155,7 +208,7 @@ run. Some advanced examples need newer MuJoCo APIs than the package minimum.
 | `cartesian_planning.py` | UR10e Cartesian path playback around an obstacle. |
 | `planner_rrt.py` | Minimal OMPL RRT-Connect in joint and task space. |
 | `grasping_force_closure.py` | Toy grasp matrices and friction cones. |
-| `ik_stub.py` | IK control flow using a lightweight stand-in backend. |
+| `ik_stub.py` | Minimal in-memory robot using the current Mink solver; no viewer or downloads. |
 
 ## Sensors and viewers
 

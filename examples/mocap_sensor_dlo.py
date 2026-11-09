@@ -12,7 +12,7 @@ CABLE_MODEL_NAME = "dlo"
 CABLE_ATTACH_PREFIX = "cable/"
 CABLE_NAME_PREFIX = f"{CABLE_ATTACH_PREFIX}{CABLE_MODEL_NAME}:"
 CABLE_TIP_SITE = f"{CABLE_NAME_PREFIX}S_last"
-CABLE_BODY_PREFIX = f"{CABLE_NAME_PREFIX}B"
+CABLE_BODY_PREFIX = f"{CABLE_ATTACH_PREFIX}{CABLE_MODEL_NAME}_"
 TIP_WELD_NAME = "tip_weld"
 MOCAP_WELD_SITE = "mocap_site"
 FORCE_ARROW_SCALE = 0.5
@@ -42,15 +42,14 @@ class Sim:
     def _build_model(self) -> tuple[mj.MjModel, mj.MjData]:
         """Build a DLO tip-load example with a mocap-mounted cable.
 
-        ``ms.cable`` creates a composite cable: multiple bodies joined together by
-        MuJoCo joints and the cable elasticity plugin. The tip site is welded to a
+        ``ms.cable`` creates a native 1D flex with bending and torsional elasticity. The tip site is welded to a
         site on the mocap body:
 
             mocap_site --weld equality-- cable tip site
 
-        The site is rotated to match the cable endpoint frame; if the welded site
-        frames start with different orientations, the weld will create an
-        artificial torque preload. ``weld_sensor`` is called with this explicit
+        Native flex vertex sites follow translation. Their orientation is fixed;
+        rod torsion is represented separately by material-frame twist hinges.
+        Use those hinges when applying torsional loads. ``weld_sensor`` is called with this explicit
         site name to read the matching force/torque sensors.
 
         The cable is initialized vertically below the mount using ``curve="0 0 s"``
@@ -59,10 +58,10 @@ class Sim:
 
             Fz = m_cable * g
 
-        With the current cable settings, the compiled cable mass is about 0.18 kg,
+        With the current cable settings, the compiled cable mass is about 0.20 kg,
         so expect:
 
-            Fz ~= 0.18 kg * 9.82 m/s^2 = 1.77 N
+            Fz ~= 0.20 kg * 9.82 m/s^2 = 1.96 N
 
         The moment caused by this support force about the cable center of mass is:
 
@@ -73,7 +72,7 @@ class Sim:
         ``tau_com`` should be near zero. If you move the cable COM sideways from
         the mount, the expected moment magnitude becomes ``|r_perp| * |F|``.
         """
-        scene = empty_scene(memory="100M")
+        scene = empty_scene(memory="100M", integrator="discrete", solver="CG", noslip_iterations=0)
 
         m_body = scene.worldbody.add_body(
             name="mocap", mocap=True, pos=[0, 0, 1.5], euler=[0, np.pi / 2, 0]
@@ -103,7 +102,7 @@ class Sim:
             mass=0.2,
             curve="0 0 s",
             segment_size=0.006,
-            joint_damping="0.1",
+            damping=0.002,
             geom_rgba=[0.2, 0.2, 0.2, 1],
         )
         f_cable = scene.worldbody.add_frame(pos=[0, 0, 0.5])
@@ -142,7 +141,8 @@ class Sim:
         return [
             i
             for i in range(self.m.nbody)
-            if (mj.mj_id2name(self.m, mj.mjtObj.mjOBJ_BODY, i) or "").startswith(prefix)
+            if (name := mj.mj_id2name(self.m, mj.mjtObj.mjOBJ_BODY, i) or "").startswith(prefix)
+            and name.removeprefix(prefix).isdigit()
         ]
 
     def cb(self, key: int) -> None:

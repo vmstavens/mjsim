@@ -1,8 +1,19 @@
+import sys
+from pathlib import Path
+
 import mujoco
-import viser
-from mjviser import Viewer
+
+# This script is also named viser.py. Hide its directory while resolving the
+# third-party package, then restore the example imports.
+_example_dir = Path(__file__).resolve().parent
+_original_paths = sys.path[:]
+try:
+    sys.path[:] = [p for p in sys.path if Path(p or ".").resolve() != _example_dir]
+    import viser
+    from mjviser import Viewer
+finally:
+    sys.path[:] = _original_paths
 from physics.palette import FLAME, apply_palette, rgb8
-from robot_descriptions import g1_mj_description
 
 from mjsim.utils.mjs import empty_scene
 
@@ -20,6 +31,8 @@ def load_humanoid() -> tuple[mujoco.MjModel, mujoco.MjData]:
     the robot into ``empty_scene()``, which adds the floor, light, skybox, and
     ground material used by the other examples in this repo.
     """
+    from robot_descriptions import g1_mj_description
+
     scene = empty_scene(
         sim_name="g1_viser",
         memory="100M",
@@ -57,7 +70,7 @@ def main() -> None:
             data.qpos[:] = model.qpos0
         mujoco.mj_forward(model, data)
 
-    print(f"Loaded MuJoCo Menagerie humanoid: {g1_mj_description.MJCF_PATH}")
+    print("Loaded MuJoCo Menagerie G1 humanoid.")
     print("Viser server running at http://localhost:8080")
 
     viewer = Viewer(model, data, reset_fn=reset, server=server)

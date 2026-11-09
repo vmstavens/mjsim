@@ -23,7 +23,11 @@ def test_cable_xml_roundtrip():
         xml = getattr(spec, "_xml_string")
 
     assert "unit_test_cable" in xml
-    assert "mujoco.elasticity.cable" in xml
+    assert "<flex" in xml
+    model = mj.MjModel.from_xml_string(xml)
+    assert model.nflex == 1
+    assert model.nplugin == 0
+    assert model.nplastic > 0
 
 
 def test_flex_deformables_compile_and_export_xml():
@@ -41,7 +45,7 @@ def test_flex_deformables_compile_and_export_xml():
     assert cloth_model.nflex == 1
     assert cloth_model.flex_edgeequality[0] == 1
     assert cloth_spec.flexes[0].young == 0
-    assert cloth_model.flex_edgedamping[0] > 0
+    assert cloth_model.flex_edgedamping[0] == 0
     assert "<flex" in cloth_spec.to_xml_string()
 
     scene = mj.MjSpec()

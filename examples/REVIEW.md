@@ -1,10 +1,37 @@
 # Example overlap and palette review
 
-This review covers all 32 top-level Python scripts, the gallery loader, and the
-shared scene defaults. Palette migration is complete for every displayed scene
-and the XML asset exporter. The 21 migrated scene builders were compiled and
-checked on MuJoCo 3.11.0; this does not certify every example's full interactive
-behavior. The conveyor additionally completed a 20-second transport rollout.
+The original palette review covered the then-current 32 top-level scripts and
+checked 21 scene builders on MuJoCo 3.11.0. The MuJoCo 4 audit below extends that
+review; the historical filename comparisons remain useful when choosing examples.
+
+## MuJoCo 4 migration audit
+
+The audit checks every source module import, complete embedded XML models, and
+scene construction across robotics, control, camera, tactile, and deformable
+examples. Cached robot descriptions support the robot scene checks. Model
+construction and short rollouts do not certify every interactive control flow.
+
+- Both `mj_xml.py` scenes now use `discrete` integration. The default drape uses
+  ordinary frictional contacts; its three-second rollout loses kinetic energy
+  and retains all three sheets on the sphere. Its GIF is regenerated from that
+  rollout. Scene arguments and `--headless` make both models directly testable.
+- `mj_tendon_finger.py` removes the obsolete `internal` contact attribute and
+  uses a supported elastic-flex integrator. Startup text now describes the
+  actual bunny press and its actuator slider.
+- Native cable contacts use flex IDs and a geom ID of `-1`. Public detailed
+  contact states now support these, retain MuJoCo 4 surface velocities, and use
+  the correct world normal. Geometry/body pair queries skip flex contacts;
+  the geometry query also no longer drops its first contact.
+- The legacy cloth helper `dqo()` rejects unsupported `joint_*` parameters
+  instead of silently ignoring them. Elastic damping uses the flex's Rayleigh
+  coefficient.
+- The grasping helper imports current package modules; its tests no longer
+  replace obsolete import paths with stubs. `ik_stub.py` now demonstrates the
+  actual current Robot/Mink API on a tiny in-memory robot. The numerical DMP
+  example uses a stable integration interval separate from demonstration sampling.
+- `viser.py` resolves the installed Viser package without importing itself under
+  that name. The G1 model loads and steps without starting a browser server.
+
 
 ## Redundancies and useful overlap
 
@@ -16,8 +43,8 @@ behavior. The conveyor additionally completed a 20-second transport rollout.
 | [`mocap_sensor.py`](mocap_sensor.py), [`mocap_sensor_api.py`](mocap_sensor_api.py), [`mocap_rod_wall_force_plot.py`](mocap_rod_wall_force_plot.py), [`mocap_sensor_dlo.py`](mocap_sensor_dlo.py) | Shared weld/load-cell construction and wrench transforms. The cases differ: a free-body site sensor versus equality loads; an instrumented load-cell API; rod/wall contact with live plotting; and a deformable cable with tare and wrench comparison. The DLO script imports `weld_sensor` from the rod example. | Keep the four teaching cases. Extract shared sensor construction and frame transforms into a helper module so examples do not import another runnable demo. `MocapWeldSensors` is the most general reader, while the rod helper also constructs the load cell. |
 | [`ur5e_control.py`](ur5e_control.py), [`admittance_controller_gui.py`](admittance_controller_gui.py) | Both instrument a UR wrist/tool and use a contact pusher. The first reads loads with optional gripper/poker; the second closes an admittance-control loop with inverse-dynamics torques. | Keep measurement and closed-loop control as separate examples; share load-cell construction where practical. |
 | [`mk_flex.py`](mk_flex.py), [`modelling.py`](modelling.py), [`deformable_assets.py`](deformable_assets.py), gallery `jelly` | Both catalogues include cables, cloth, and soft blocks. `mk_flex.py` compares flex dimensions and a composite cable; `modelling.py` mixes robot and mesh attachment with deformables; `deformable_assets.py` exports XML; `jelly` isolates volumetric elasticity. | Prefer `mk_flex.py` for the visual catalogue and `jelly` for a focused physics demo. Retain XML export as a utility. Narrow `modelling.py` to scene/mesh attachment so it adds a clear lesson. |
-| [`mj_xml.py`](mj_xml.py), gallery `hammock` | Both include cloth-like structures and a humanoid. The inline XML also has a bag catching a humanoid and three free cloths draping over a sphere; the hammock pins four corners. These have distinct contact and boundary conditions. | Keep the distinct systems, but split the inline `bags` / `drape` selection into named entries instead of editing source to choose a scene. |
-| [`mj_tendon_finger.py`](mj_tendon_finger.py), gallery `muscle_arm` | The filename and startup message promise a tendon finger, but the actual XML contains a trilinear bunny flex and a sliding press. There is no `finger_curl` tendon; Space also refers to an uninitialized `self.animate`. | Rename/rework this as a bunny-press demo and repair its controls. It is not a duplicate of the tendon/muscle arm. |
+| [`mj_xml.py`](mj_xml.py), gallery `hammock` | Both include cloth-like structures and a humanoid. The inline XML also has a bag catching a humanoid and three free cloths draping over a sphere; the hammock pins four corners. These have distinct contact and boundary conditions. | Kept as distinct systems; the launcher now accepts `bags` / `drape` arguments. |
+| [`mj_tendon_finger.py`](mj_tendon_finger.py), gallery `muscle_arm` | The filename and startup message promise a tendon finger, but the actual XML contains a trilinear bunny flex and a sliding press. There is no `finger_curl` tendon; Space also refers to an uninitialized `self.animate`. | The startup message and controls now describe the bunny press; the historical filename remains. It is not a duplicate of the tendon/muscle arm. |
 | [`controller_dmp.py`](controller_dmp.py), [`ur10e_dmp_cartesian.py`](ur10e_dmp_cartesian.py) | The small example fits/samples a Cartesian DMP numerically; the full one loads CSV, solves robot IK, visualizes the path, and records tracking. | Keep both as basic API and integrated robot examples. Shared concept, different learning scope. |
 | [`planner_rrt.py`](planner_rrt.py), [`cartesian_planning.py`](cartesian_planning.py) | The former exercises joint/task planners with a mock robot; the latter solves and replays a UR10e path around an obstacle. | Keep both as planner API and integrated scene examples. |
 | [`earth_digger.py`](earth_digger.py), gallery `slider_crank` | Both use slider-crank transmissions. The gallery isolates forward/reverse/broken geometry; the excavator applies transmissions to an articulated machine. | Keep both as mechanism and application. |
@@ -52,8 +79,8 @@ scene. There are no remaining unthemed displayed scenes.
 | `earth_digger.py` | Shared | Orange selected machine links/cab; neutral structure and terrain, orange hydraulic visualizations. |
 | `gelsight_demo.py` | Shared | Orange indenter and neutral scene. The sensor algorithm retains its diagnostic RGB response; that is sensor data rather than geometry styling. |
 | `grasping_force_closure.py` | N/A | Numerical grasp and friction-cone inspection. |
-| `ik_stub.py` | N/A | Stubbed IK control-flow example. |
-| `mj_tendon_finger.py` | Shared | Orange bunny flex and neutral press/background. The separate naming/control issues above remain. |
+| `ik_stub.py` | N/A | Minimal in-memory MuJoCo robot with the real Mink solver. |
+| `mj_tendon_finger.py` | Shared | Orange bunny flex and neutral press/background. Startup instructions now describe the press actuator. |
 | `mj_xml.py` | Shared | Layered cloth uses flame, off-white, and light orange to remain distinguishable; the bag is also themed when selected. |
 | `mocap_gripper_control.py` | Shared | Orange box, off-white moving gripper, charcoal floor. |
 | `mocap_rod_wall_force_plot.py` | Shared | Orange rod and target markers; dark force plot uses palette colors plus distinct line styles. |
@@ -80,7 +107,7 @@ transparency, and accepts explicit geometry/site/flex color roles.
 ## Suggested cleanup order
 
 1. Retire the duplicated scratch robot scene and make the canonical entry points clear.
-2. Correct the misleading `ur5e_control.py` and `mj_tendon_finger.py` names/descriptions; repair the bunny-press controls.
+2. Consider renaming the historical `ur5e_control.py` and `mj_tendon_finger.py` entry points; bunny-press startup instructions are corrected.
 3. Extract shared weld/load-cell helpers while retaining the different sensor cases.
 4. Keep the completed palette coverage when adding scenes. Use explicit roles for start/goal, actual/target, and overlapping cloth layers.
 5. Keep browser overlays and plots on the shared colors; retain diagnostic sensor responses as sensor data. The current migration covers these presentation layers as well as model geometry.

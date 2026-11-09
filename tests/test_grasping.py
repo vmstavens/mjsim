@@ -1,80 +1,5 @@
-import sys
-import types
-from enum import Enum
-
 import numpy as np
 import pytest
-
-# Provide lightweight stand-ins for optional modules so we can import grasping in isolation.
-robots_mod = sys.modules.get("robots", types.ModuleType("robots"))
-if "robots" not in sys.modules:
-    sys.modules["robots"] = robots_mod
-base_robot_mod = sys.modules.get("robots.base_robot", types.ModuleType("robots.base_robot"))
-if "robots.base_robot" not in sys.modules:
-    sys.modules["robots.base_robot"] = base_robot_mod
-
-if not hasattr(base_robot_mod, "BaseRobot"):
-    class _BaseRobot:
-        pass
-    base_robot_mod.BaseRobot = _BaseRobot
-    robots_mod.base_robot = base_robot_mod
-
-utils_pkg = sys.modules.get("utils", types.ModuleType("utils"))
-if "utils" not in sys.modules:
-    sys.modules["utils"] = utils_pkg
-
-if "utils.math" not in sys.modules:
-    math_mod = types.ModuleType("utils.math")
-
-    def _skew_symmetric(v: np.ndarray) -> np.ndarray:
-        return np.array(
-            [
-                [0, -v[2], v[1]],
-                [v[2], 0, -v[0]],
-                [-v[1], v[0], 0],
-            ]
-        )
-
-    math_mod.skew_symmetric = _skew_symmetric
-    utils_pkg.math = math_mod
-    sys.modules["utils.math"] = math_mod
-
-if "utils.mj" not in sys.modules:
-    mj_mod = types.ModuleType("utils.mj")
-
-    class _JointType(Enum):
-        HINGE = 0
-        SLIDE = 1
-
-    class _ObjType(Enum):
-        JOINT = 0
-        BODY = 1
-        GEOM = 2
-
-    def _pose_stub(model, data, jid, obj_type):
-        return types.SimpleNamespace(R=np.eye(3), t=np.zeros(3))
-
-    def _get_type_stub(model, jid, obj_type):
-        return _JointType.HINGE
-
-    mj_mod.JointType = _JointType
-    mj_mod.ObjType = _ObjType
-    mj_mod.get_pose = _pose_stub
-    mj_mod.get_type = _get_type_stub
-    utils_pkg.mj = mj_mod
-    sys.modules["utils.mj"] = mj_mod
-
-if "utils.physics" not in sys.modules:
-    physics_mod = types.ModuleType("utils.physics")
-
-    class _ContactModelType(Enum):
-        SOFT = 0
-        HARD = 1
-        PwoF = 2
-
-    physics_mod.ContactModelType = _ContactModelType
-    utils_pkg.physics = physics_mod
-    sys.modules["utils.physics"] = physics_mod
 
 from mjsim.utils import grasping
 
@@ -129,8 +54,16 @@ def test_compute_S_stack_shapes_and_blocks():
 
 def test_in_force_closure_returns_true_with_stubbed_lp(monkeypatch: pytest.MonkeyPatch):
     # Stub linear programs to report success regardless of inputs
-    monkeypatch.setattr(grasping, "solve_lp2", lambda *_args, **_kwargs: type("R", (), {"success": True})())
-    monkeypatch.setattr(grasping, "solve_lp3", lambda *_args, **_kwargs: type("R", (), {"success": True})())
+    monkeypatch.setattr(
+        grasping,
+        "solve_lp2",
+        lambda *_args, **_kwargs: type("R", (), {"success": True})(),
+    )
+    monkeypatch.setattr(
+        grasping,
+        "solve_lp3",
+        lambda *_args, **_kwargs: type("R", (), {"success": True})(),
+    )
     # Simplify Jacobian computation so dimensions align deterministically
     monkeypatch.setattr(
         grasping,

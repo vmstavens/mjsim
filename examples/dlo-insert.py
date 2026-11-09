@@ -86,11 +86,13 @@ class DloInsertSim:
     def _build_model(self) -> tuple[mj.MjModel, mj.MjData]:
         scene = empty_scene(
             sim_name="dlo_insert_viser",
+            integrator="discrete",
+            noslip_iterations=0,
             memory="100M",
             timestep=0.001,
             tolerance=1e-8,
             iterations=80,
-            solver="Newton",
+            solver="CG",
             nativeccd=True,
             gravity=(0.0, 0.0, 0.0),
             statistic_center=FIGURE_CENTER,
@@ -245,7 +247,7 @@ class DloInsertSim:
             geom_friction="0.9 0.02 0.001",
             geom_condim=4,
             geom_solref="0.001 1",
-            joint_damping="0.03",
+            damping=0.002,
         )
         cable_frame = scene.worldbody.add_frame(pos=self.initial_mocap_pos.tolist())
         scene.attach(dlo, prefix=CABLE_ATTACH_PREFIX, frame=cable_frame)

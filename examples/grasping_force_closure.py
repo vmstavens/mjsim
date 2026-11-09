@@ -2,7 +2,8 @@
 Quick grasping helper demo: build a tiny two-contact scenario and inspect the
 grasp matrix and friction cone approximation.
 
-This example is self-contained (NumPy only) and does not require MuJoCo.
+This example uses the installed mjsim dependencies and needs no model assets
+or running simulation.
 """
 
 import numpy as np

@@ -198,6 +198,7 @@ def get_number_of(model: mj.MjModel, obj_type: ObjType) -> int:
         ObjType.SITE: model.nsite,
         ObjType.CAMERA: model.ncam,
         ObjType.LIGHT: model.nlight,
+        ObjType.FLEX: model.nflex,
         ObjType.MESH: model.nmesh,
         ObjType.SKIN: model.nskin,
         ObjType.HFIELD: model.nhfield,
@@ -207,7 +208,7 @@ def get_number_of(model: mj.MjModel, obj_type: ObjType) -> int:
         ObjType.EXCLUDE: model.nexclude,
         ObjType.EQUALITY: model.neq,
         ObjType.TENDON: model.ntendon,
-        ObjType.SENSOR: model.nsensordata,
+        ObjType.SENSOR: model.nsensor,
         ObjType.NUMERIC: model.nnumeric,
         ObjType.TEXT: model.ntext,
         ObjType.TUPLE: model.ntuple,
@@ -1051,6 +1052,7 @@ def set_state(
     qpos: Optional[ArrayLike] = None,
     qvel: Optional[ArrayLike] = None,
     act: Optional[ArrayLike] = None,
+    plastic: Optional[ArrayLike] = None,
     ctrl: Optional[ArrayLike] = None,
     mpos: Optional[ArrayLike] = None,
     mquat: Optional[ArrayLike] = None,
@@ -1078,8 +1080,9 @@ def set_state(
         Keyframe index or name to load before applying explicit fields.
     time : float, optional
         Simulation time to assign to ``data.time``.
-    qpos, qvel, act, ctrl : array-like, optional
+    qpos, qvel, act, ctrl, plastic : array-like, optional
         Values copied into the corresponding flat ``MjData`` arrays.
+        ``plastic`` includes plastic rest strains and native rod frame history.
     mpos, mquat : array-like, optional
         Keyframe-style names for mocap body positions and quaternions.
     mocap_pos, mocap_quat : array-like, optional
@@ -1148,6 +1151,8 @@ def set_state(
         _copy_array("qvel", data.qvel, qvel)
     if act is not None:
         _copy_array("act", data.act, act)
+    if plastic is not None:
+        _copy_array("plastic", data.plastic, plastic)
     if ctrl is not None:
         _copy_array("ctrl", data.ctrl, ctrl)
     if mpos is not None:
@@ -1227,7 +1232,8 @@ def get_geoms_in_contact(model: mj.MjModel, data: mj.MjData) -> List[Tuple[str, 
     Retrieve a list of geometry pairs currently in contact in the MuJoCo simulation.
 
     This function iterates through all contacts in the MuJoCo simulation data and
-    collects the names of geometries that are in contact. It returns a list of tuples,
+    collects the names of geometries that are in contact. Flex contacts are
+    omitted; use ``get_contact_states`` to inspect those. It returns a list of tuples,
     where each tuple contains the names of two geometries that are in contact.
 
     Args
@@ -1250,9 +1256,9 @@ def get_geoms_in_contact(model: mj.MjModel, data: mj.MjData) -> List[Tuple[str, 
     contact_states = []
 
     for i in range(data.ncon):
-        if not i:
-            return contact_states
         contact = data.contact[i]
+        if contact.geom1 < 0 or contact.geom2 < 0:
+            continue
         geom1_name = id2name(model, contact.geom1, ObjType.GEOM)
         geom2_name = id2name(model, contact.geom2, ObjType.GEOM)
         contact_states.append((geom1_name, geom2_name))
@@ -1262,7 +1268,10 @@ def get_geoms_in_contact(model: mj.MjModel, data: mj.MjData) -> List[Tuple[str, 
 
 def get_bodies_in_contact(model: mj.MjModel, data: mj.MjData) -> List[Tuple[str, str]]:
     """
-    Return body-name pairs for all current geom contacts.
+    Return body-name pairs for current geom contacts, excluding flex contacts.
+
+    Flex elements can span multiple vertex bodies, so they have no unique body
+    pair. Inspect ``get_contact_states`` and its flex/element IDs for those.
 
     Parameters
     ----------
@@ -1280,6 +1289,8 @@ def get_bodies_in_contact(model: mj.MjModel, data: mj.MjData) -> List[Tuple[str,
 
     for i in range(data.ncon):
         contact = data.contact[i]
+        if contact.geom1 < 0 or contact.geom2 < 0:
+            continue
         geom_ids_in_contact.append((contact.geom1, contact.geom2))
 
     body_names = [
@@ -1417,10 +1428,12 @@ class ContactState:
         The second geometry index.
     geom_names : np.ndarray
         A 2-element array of strings representing the names of the geometries in contact.
-    geom1_name : str
-        The name of the first geometry.
-    geom2_name : str
-        The name of the second geometry.
+    geom1_name : str or None
+        The name of the first geometry, or None for a flex side.
+    geom2_name : str or None
+        The name of the second geometry, or None for a flex side.
+    surfacevel : np.ndarray
+        Relative surface velocity in contact-frame tangent1, tangent2, spin coordinates.
     includemargin : float
         The inclusion margin for the contact; includes if dist < includemargin = margin - gap.
     mu : float
@@ -1477,8 +1490,9 @@ class ContactState:
     geom_names: np.ndarray = field(
         default_factory=lambda: np.array([-1, -1], dtype=int)
     )
-    geom1_name: str = None
-    geom2_name: str = None
+    geom1_name: str | None = None
+    geom2_name: str | None = None
+    surfacevel: np.ndarray = field(default_factory=lambda: np.zeros(3))
     includemargin: float = 0.0
     mu: float = 0.0
     pos: np.ndarray = field(default_factory=lambda: np.zeros(3))
@@ -1499,8 +1513,12 @@ class ContactState:
         self.c_wrench = self._compute_wrench()
         self.w_wrench = self._transform_wrench_to_global(self.c_wrench)
         self.normal = self._compute_contact_normal()
-        self.geom1_name = id2name(self.model, self.geom1, ObjType.GEOM)
-        self.geom2_name = id2name(self.model, self.geom2, ObjType.GEOM)
+        self.geom1_name = (
+            id2name(self.model, self.geom1, ObjType.GEOM) if self.geom1 >= 0 else None
+        )
+        self.geom2_name = (
+            id2name(self.model, self.geom2, ObjType.GEOM) if self.geom2 >= 0 else None
+        )
         self.geom_names = np.array([self.geom1_name, self.geom2_name])
 
     def _compute_wrench(self):
@@ -1521,7 +1539,7 @@ class ContactState:
     def _compute_contact_normal(self):
         # in accordance with the mujoco documentation, the x-axis of the frame is the normal of the contact
         # https://mujoco.readthedocs.io/en/stable/computation/index.html
-        normal = self.frame.reshape(3, 3)[:, 0]
+        normal = self.frame.reshape(3, 3)[0].copy()
         return normal
 
     @classmethod
@@ -1551,6 +1569,7 @@ class ContactState:
             solimp=mjcontact.solimp,
             solref=mjcontact.solref,
             solreffriction=mjcontact.solreffriction,
+            surfacevel=mjcontact.surfacevel.copy(),
             vert=mjcontact.vert,
             index=index,
             data=data,

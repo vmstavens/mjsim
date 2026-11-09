@@ -1,5 +1,8 @@
 # Examples
 
+The package targets MuJoCo 4.x. Start with the [MuJoCo 4 feature guide](GUIDE.md#mujoco-4-features)
+for native rod torsion, plasticity, speculative contacts, and CPU batching.
+
 Run these commands from the repository root using `uv run`. It selects the
 project environment and synchronizes the dependencies declared in
 `pyproject.toml` and `uv.lock`; no virtual-environment activation is needed.
@@ -441,7 +444,7 @@ and a sustained final trefoil match. No optional knot-analysis package is needed
   </tr>
   <tr>
     <td><a href="physics/models/extended/flex/pulley.xml"><img src="media/pulley.gif" alt="pulley" width="280" height="210"></a></td>
-    <td><a href="physics/models/extended/plugin/elasticity/coil.xml"><img src="media/coil.gif" alt="coil" width="280" height="210"></a></td>
+    <td><a href="physics/models/extended/flex/coil.xml"><img src="media/coil.gif" alt="coil" width="280" height="210"></a></td>
     <td><a href="physics/models/tendon_arm/arm26.xml"><img src="media/muscle_arm.gif" alt="muscle_arm" width="280" height="210"></a></td>
   </tr>
   <tr>
