@@ -91,7 +91,7 @@ model.opt.enableflags &= ~mujoco.mjtEnableBit.mjENBL_SPECULATIVE
 ```
 
 New scenes can enable the feature with `empty_scene(speculative=True)`.
-See the [package migration notes](../README.md#migrating-from-mjsim-01) and
+See the [package migration notes](../docs/migration/README.md) and
 [official release notes](https://mujoco.readthedocs.io/en/4.0.0/changelog.html).
 
 ## Rendering the GIF grid

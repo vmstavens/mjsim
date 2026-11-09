@@ -1,202 +1,14 @@
 # mjsim
 
-MuJoCo utilities for quickly stitching together controllers, planners, sensors, and deformable-object assets.
+Build robotics and deformable-object simulations with MuJoCo. mjsim brings
+controllers, motion planners, sensors, and reusable scene builders together in Python.
 
-## Installation
+- **Control robots:** operational-space impedance control and Cartesian movement primitives.
+- **Plan motion:** joint-space and task-space planning with OMPL.
+- **Work with soft materials:** cables, cloth, elastic solids, and mesh-based deformables.
+- **See and feel:** RGB, depth, segmentation, point clouds, and GelSight tactile sensing.
 
-The OBJ/STL meshes and airway texture use Git LFS. After installing Git LFS,
-retrieve the model assets from the repository root:
-
-```bash
-git lfs install
-git lfs pull
-```
-
-From the repository root, use uv to install the project and its locked dependencies:
-
-```bash
-uv sync --locked
-uv run python examples/heterogeneous_cube.py
-```
-
-`uv run` uses the project's `.venv` and installs the local package in editable
-mode. No separate activation or pip installation is needed. The repository
-selects Python 3.12 through `.python-version`. See the
-[MuJoCo guide](https://mujoco.readthedocs.io/) for platform-specific graphics
-runtime requirements.
-
-To validate the cube without opening a viewer:
-
-```bash
-uv run python examples/heterogeneous_cube.py --headless
-```
-
-To upgrade `mjsim` in a consuming uv project:
-
-```bash
-uv sync --upgrade-package mjsim
-```
-
-This also refreshes a Git dependency's locked commit. The upgraded package's
-minimum dependency versions in `pyproject.toml` apply to the consuming project;
-this repository's `uv.lock` does not. To upgrade all dependencies allowed by
-the consuming project's constraints, use `uv sync --upgrade`.
-
-For pip installations, use `pip install --upgrade mjsim` (or the same Git URL
-used to install it). These commands require the updated release or Git commit
-to be available from the project's configured source.
-
-Version 0.2.0 targets **MuJoCo 4.x** and Python 3.11+ (this repository uses
-Python 3.12). See the [MuJoCo 4 release notes](https://mujoco.readthedocs.io/en/4.0.0/changelog.html).
-
-### Migrating from mjsim 0.1
-
-- `cable()` now creates a native 1D elastic flex. The removed cable plugin and
-  `<composite>` element are no longer generated. `bend` maps to Young's modulus
-  and `twist` to shear modulus, both in Pa. `n_segments` counts vertices and must
-  be at least three. `points=(N, 3)` supplies a curved, stress-free reference;
-  `curve` supports straight axis curves such as `"0 s 0"`.
-- Vertex bodies are `<name>_<i>` and material-frame hinges are `<name>_twist_0`
-  through `<name>_twist`, with `<name>` derived from `prefix.rstrip(":/")`.
-  Use names or `flex_vertbodyid`, since added twist joints change state offsets.
-  Endpoint site names `<prefix>S_first` and `<prefix>S_last` are preserved, but
-  follow vertex translation; control twist hinges for torsional loads.
-  `initial="none"` clamps the first edge, `"ball"` pins its first vertex, and
-  `"free"` leaves it unpinned. Plugin `vmax` coloring and unsupported legacy
-  geom/joint options now raise errors with migration guidance. Nonzero
-  `joint_damping` is unsupported on native elastic vertices; use Rayleigh
-  elastic `damping` (in seconds), retuning rather than copying old coefficients. The legacy
-  `dqo()` cloth helper also rejects unsupported `joint_*` options.
-- Parent scenes with elastic flexes should use
-  `empty_scene(integrator="discrete", solver="CG", noslip_iterations=0)`.
-  Standalone elastic assets select a compatible integrator. Flex edge damping
-  defaults to zero because `discrete` rejects edge stiffness and damping;
-  use continuum `damping` for elastic materials. Explicit nonzero edge terms
-  remain available for compatible integrators.
-- Save and restore `mjSTATE_INTEGRATION`, which includes `mjSTATE_PLASTIC`:
-  native rods store their transported frames there even without plastic yield.
-  `set_state(..., plastic=...)` also accepts explicit plastic/frame state.
-- `get_contact_states()` supports native flex contacts (geom names are `None`
-  on flex sides) and includes contact `surfacevel`. Geometry/body pair queries
-  return only ordinary geom contacts; use the detailed states for flex IDs.
-- Flex material IDs are per element; mass-matrix extraction uses
-  `mj_fullM(model, data, destination)`. Replication uses the native `<replicate>`
-  element. Bundled gallery models are refreshed to release 4.0.0, including
-  tendon side-site placements and corrected flex elastic constants. Custom
-  material parameters may need retuning under the corrected elastic formulation.
-
-MuJoCo 4 splits its distribution into `mujoco-core` and `mujoco-studio`;
-`mujoco` installs both, retaining this package's viewer and camera support.
-For an existing **pip** environment, uninstall the old distribution first to
-avoid files being removed during the split-package upgrade:
-
-```bash
-pip uninstall -y mujoco
-pip install --upgrade mjsim
-```
-
-With uv, use `uv sync --upgrade` and check that `uv run python -c
-"import mujoco; print(mujoco.__version__)"` reports 4.x.
-
-### New feature examples
-
-```bash
-uv run python examples/rod_twist.py             # Native elastic rod torsion
-uv run python examples/rod_twist.py --headless  # Exact full-state replay check
-uv run python examples/batch_simulation.py --nsim 64 --threads 4
-uv run python examples/physics_gallery.py plastic_wire
-uv run python examples/physics_gallery.py plastic_foil --original-colors
-uv run python examples/physics_gallery.py plastic_torsion --original-colors
-uv run python examples/physics_gallery.py speculative_flipper
-```
-
-The gallery includes all six upstream plasticity demos (`plastic_wire`,
-`plastic_paper`, `plastic_foil`, `plastic_clay`, `plastic_roller`,
-`plastic_torsion`) and all three speculative-contact demos (`speculative_newton`,
-`speculative_chain`, `speculative_flipper`). Add `--headless --duration 2` to run
-without graphics. `--original-colors` preserves upstream material distinctions
-when comparing elastic and plastic objects. The CPU batching example demonstrates
-live state views and checks results against a scalar loop; this API was
-introduced in MuJoCo 3.17 and is included in 4.0.
-
-Enable predictive rigid-body contacts with `empty_scene(speculative=True)`.
-They predict motion from current velocities, so they do not guarantee protection
-against tunneling caused by large within-step accelerations.
-
-## Quick start
-
-```python
-import glfw
-import mjsim as ms
-import mujoco as mj
-from robot_descriptions import ur10e_mj_description, robotiq_2f85_mj_description
-import spatialmath as sm
-
-class Sim(ms.BaseSim):
-    def __init__(self):
-        self._model, self._data = self._init()
-
-        self.ur = ms.Robot(self.model, self.data, "ur/")
-        self.gripper = ms.Robot(self.model, self.data, "ur/gripper/")
-
-        T = ms.get_pose(self.model, self.data, self.ur.info.site_names[0], ms.ObjType.SITE)
-
-        self.ctrl = ms.OpSpace(self.ur, gravity_comp=True)
-
-    def _init(self) -> tuple[mj.MjModel, mj.MjData]:
-
-        scene = ms.empty_scene()
-
-        ur = mj.MjSpec.from_file(ur10e_mj_description.MJCF_PATH)
-
-        gripper = mj.MjSpec.from_file(robotiq_2f85_mj_description.MJCF_PATH)
-
-        s_attachment = ur.site("attachment_site")
-
-        s_attachment.attach_body(gripper.worldbody.first_body(),prefix="gripper/")
-
-        f_ur = scene.worldbody.add_frame()
-
-        scene.attach(ur, "ur/", frame=f_ur)
-
-        b_ball = scene.worldbody.add_body(name="ball", pos=[0,0,1])
-        b_ball.add_geom(name="ball", size=[0.01])
-        b_ball.add_freejoint()
-
-        m = scene.compile()
-        return m, mj.MjData(m)
-
-    @property
-    def model(self):
-        return self._model
-    @property
-    def data(self):
-        return self._data
-
-    def keyboard_callback(self, key):
-        if key is glfw.KEY_SPACE:
-            print("Placing ball at [0, 0, 1]...")
-            ms.set_pose(self.model, self.data, "ball", ms.ObjType.BODY, sm.SE3.Tz(1))
-        if key is glfw.KEY_PERIOD:
-            print("Printing gripper information:")
-            print(self.gripper.info)
-
-
-    @ms.thread
-    def see_me_run(self, ss: ms.SimSync):
-        while True:
-            ss.step()
-
-if __name__ == "__main__":
-    sim = Sim()
-
-    sim.run()
-```
-## Included building blocks
-- Controllers: operational-space impedance (`mjsim.ctrl.OpSpace`) and Cartesian/quaternion DMPs (`mjsim.ctrl.DMPCartesian`).
-- Planners: OMPL-backed joint- and task-space planning helpers (`mjsim.utils.ompl.qplan`/`xplan`).
-- Deformables: shortcuts for cables, cloth, and replicated geometry (`mjsim.utils.mjs.cable`, `cloth`, `pipe`, `replicate`).
-- Sensors: MuJoCo camera wrapper with RGB/depth/segmentation and point-cloud extraction (`mjsim.sensors.Camera`).
+[Quick start](docs/quickstart/README.md) · [Examples](examples/GUIDE.md) · [Documentation](docs/README.md)
 
 ## Examples
 
@@ -245,28 +57,34 @@ if __name__ == "__main__":
 
 [Usage](examples/GUIDE.md) · [Sources](examples/physics/models/UPSTREAM.md)
 
-## Testing
-Run pytest with the optional development dependencies:
+## Installation
+
+Requires **MuJoCo 4.x** and **Python 3.11+**. This repository selects Python 3.12.
+Install [Git LFS](https://git-lfs.com/) and [uv](https://docs.astral.sh/uv/),
+then run from the repository root:
+
 ```bash
-uv run --extra dev pytest
-uv run --extra dev pytest tests/test_heterogeneous_cube.py
+git lfs install
+git lfs pull
+uv sync --locked
+uv run python examples/heterogeneous_cube.py
 ```
 
-### IDE stubs
-Generate `typings/` stubs on demand from the root of the project where you use
-`mjsim`:
+`uv run` uses the project's virtual environment and the local editable package.
+For a simulation without a viewer, add `--headless`.
+See the [MuJoCo guide](https://mujoco.readthedocs.io/) for graphics runtime requirements.
+
+## Start exploring
+
 ```bash
-mjsim-stubgen
+uv run python examples/mj_xml.py drape
+uv run python examples/physics_gallery.py --list
+uv run python examples/rod_twist.py
 ```
 
-When using `uv`, run the command through the project environment:
-```bash
-uv run mjsim-stubgen
-```
+Follow the [Python quick start](docs/quickstart/README.md) to build your own scene,
+or browse the [example guide](examples/GUIDE.md) for robot manipulation, tactile
+sensing, plastic deformation, and speculative contacts.
 
-By default, the command generates stubs for the importable binary dependencies
-used by `mjsim`: `mujoco`, `mujoco.mjx`, `ompl`, `open3d`, and `mink`. To target
-specific modules or a different output directory:
-```bash
-mjsim-stubgen mujoco mujoco.mjx -o typings
-```
+Upgrading an existing project? See the [migration guide](docs/migration/README.md).
+Testing and IDE setup are covered in the [development guide](docs/development/README.md).
