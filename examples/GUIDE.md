@@ -159,6 +159,13 @@ gripper for fourteen. These GIFs use 10 fps. Regenerate just these previews with
 MUJOCO_GL=egl uv run --with pillow python examples/render_physics_gifs.py mj_xml particle_container velux_sealing mocap_gripper_control --fps 10
 ```
 
+The bronchoscope preview shows the full 28-second automatic insertion with a
+tip-camera inset. Regenerate it with:
+
+```bash
+MUJOCO_GL=egl uv run --with pillow python examples/render_physics_gifs.py bronchoscope --fps 10
+```
+
 The gripper uses `robot_descriptions` and may download its model on first use.
 
 The drape preview uses ordinary frictional solver contacts, with elastic stiffness

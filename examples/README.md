@@ -21,6 +21,12 @@ uv run python examples/bronchoscope.py --headless --auto --duration 28
 MUJOCO_GL=egl uv run python examples/bronchoscope.py --headless --auto --camera-output /tmp/bronchoscope-tip.png
 ```
 
+Regenerate the simulation-table preview, including its tip-camera inset:
+
+```bash
+MUJOCO_GL=egl uv run --with pillow python examples/render_physics_gifs.py bronchoscope --fps 10
+```
+
 The simulation starts in **manual control**, with the tip 12 mm above the inlet,
 and waits for your input. `--manual` is also accepted explicitly. The optional
 `--auto` demo waits two seconds, then advances the base 60 mm over 24 seconds
@@ -461,6 +467,9 @@ and a sustained final trefoil match. No optional knot-analysis package is needed
     <td><a href="mocap_gripper_control.py"><img src="media/mocap_gripper_control.gif" alt="mocap_gripper_control" width="280" height="210"></a></td>
     <td><a href="velux_sealing.py"><img src="media/velux_sealing.gif" alt="velux_sealing" width="280" height="210"></a></td>
     <td><a href="physics/models/slider_crank/slider_crank.xml"><img src="media/slider_crank.gif" alt="slider_crank" width="280" height="210"></a></td>
+  </tr>
+  <tr>
+    <td colspan="3" align="center"><a href="bronchoscope.py"><img src="media/bronchoscope.gif" alt="Bronchoscope insertion with tip-camera view" width="280" height="210"></a></td>
   </tr>
 </table>
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import math
+from contextlib import ExitStack
 from pathlib import Path
 
 import mujoco as mj
@@ -20,9 +21,10 @@ from physics.catalog import (
     load_example,
     track_camera,
 )
-from PIL import Image
+from PIL import Image, ImageDraw
 
 EXTRA_DURATIONS = {
+    "bronchoscope": 28,
     "conveyor_belt": 16,
     "mj_xml": 3,
     "particle_container": 7,
@@ -36,19 +38,26 @@ def render_gif(name: str, output: Path, duration: float, fps: int) -> None:
     camera = mj.MjvCamera()
     if name in EXTRA_DURATIONS:
         module = importlib.import_module(name)
-        if name == "particle_container":
+        if name == "bronchoscope":
+            sim = module.BronchoscopeSim(module.default_airway())
+        elif name == "particle_container":
             # A lighter 120-particle grid keeps README regeneration practical.
             sim = module.Sim(module.particle_grid(128))
         elif name == "mocap_gripper_control":
             sim = module.Sim(manual=False)
         else:
             sim = module.Sim()
-        model, data = (sim.model, sim.data) if name == "mj_xml" else (sim.m, sim.d)
+        model, data = (
+            (sim.model, sim.data)
+            if name in ("mj_xml", "bronchoscope")
+            else (sim.m, sim.d)
+        )
         if name == "conveyor_belt":
             sim.configure_camera(camera)
         else:
             lookat, distance, azimuth, elevation = {
                 "mj_xml": ([0, 0, 0.4], 2.1, 125, -25),
+                "bronchoscope": ([0.04, 0, 0.17], 0.65, 105, -18),
                 "particle_container": ([0, 0, 0.11], 0.82, 135, -25),
                 "velux_sealing": ([0, 0.45, 0.22], 1.35, 125, -22),
                 "mocap_gripper_control": ([0, 0, 0.23], 0.9, 135, -20),
@@ -59,7 +68,10 @@ def render_gif(name: str, output: Path, duration: float, fps: int) -> None:
             camera.elevation = elevation
 
         def step():
-            if name == "mj_xml":
+            if name == "bronchoscope":
+                sim.demo()
+                sim.step(10)
+            elif name == "mj_xml":
                 mj.mj_step(model, data)
             else:
                 sim.step()
@@ -73,7 +85,13 @@ def render_gif(name: str, output: Path, duration: float, fps: int) -> None:
 
     mj.mj_forward(model, data)
     frames = []
-    with mj.Renderer(model, height=270, width=360) as renderer:
+    with ExitStack() as stack:
+        renderer = stack.enter_context(mj.Renderer(model, height=270, width=360))
+        tip_renderer = (
+            stack.enter_context(mj.Renderer(model, height=90, width=120))
+            if name == "bronchoscope"
+            else None
+        )
         for frame in range(math.ceil(duration * fps)):
             target_time = frame / fps
             while data.time < target_time:
@@ -89,7 +107,17 @@ def render_gif(name: str, output: Path, duration: float, fps: int) -> None:
             if name in EXAMPLES:
                 track_camera(name, model, data, camera)
             renderer.update_scene(data, camera=camera)
-            frames.append(Image.fromarray(renderer.render()))
+            rendered = Image.fromarray(renderer.render())
+            if tip_renderer is not None:
+                # Match the interactive demo: external anatomy plus tip video.
+                tip_image = Image.fromarray(sim.camera_image(tip_renderer))
+                draw = ImageDraw.Draw(rendered)
+                draw.rectangle(
+                    (226, 156, 353, 263), fill=(17, 18, 20), outline=(173, 176, 181)
+                )
+                draw.text((231, 159), "Tip camera", fill=(242, 242, 238))
+                rendered.paste(tip_image, (230, 170))
+            frames.append(rendered)
 
     # Use one palette across the rollout to avoid color flicker between frames.
     samples = frames[:: max(1, len(frames) // 10)]
