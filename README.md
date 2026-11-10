@@ -54,7 +54,9 @@ controllers, motion planners, sensors, and reusable scene builders together in P
     <td><a href="examples/physics/models/slider_crank/slider_crank.xml"><img src="examples/media/slider_crank.gif" alt="slider_crank" width="280" height="210"></a></td>
   </tr>
   <tr>
-    <td colspan="3" align="center"><a href="examples/bronchoscope.py"><img src="examples/media/bronchoscope.gif" alt="Bronchoscope insertion with tip-camera view" width="280" height="210"></a></td>
+    <td><a href="examples/bronchoscope.py"><img src="examples/media/bronchoscope.gif" alt="Bronchoscope insertion with tip-camera view" width="280" height="210"></a></td>
+    <td><a href="examples/snap_fit.py"><img src="examples/media/snap_fit.gif" alt="Snap fit opening with a force-sensing finger" width="280" height="210"></a></td>
+    <td></td>
   </tr>
 </table>
 

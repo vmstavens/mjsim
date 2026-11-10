@@ -7,6 +7,49 @@ Run these commands from the repository root using `uv run`. It selects the
 project environment and synchronizes the dependencies declared in
 `pyproject.toml` and `uv.lock`; no virtual-environment activation is needed.
 
+[Snap fit](snap_fit.py): a V-shaped friction clip, built with `MjSpec`.
+A lid pivots on the left, while a V spring on the right holds it through contact
+pressure and friction. Its 44 short box segments have damped revolute joints,
+with 24 segments around a tight 3 mm bottom radius and an angled free leg.
+There are no hooks or undercuts.
+
+```bash
+uv run python examples/snap_fit.py
+```
+
+An orange mocap handle carries a rounded finger and a three-axis force sensor.
+Double-click the **orange handle**, then **Ctrl + right-drag** to move it. For
+precise positioning, **A/D** moves left/right, **W/S** up/down and **Q/E** in depth,
+in 0.5 mm steps. The finger starts just to the right of the release tab.
+
+The overlay plots total force magnitude and the leftward pressing component in
+newtons over five seconds. Its peak reading samples every physics step. The
+sensor measures the rigid finger's support load, with its static weight removed;
+it includes contact with any part of the mechanism. **R** clears history and peak.
+Press **P** to play/replay the opening plan from the closed state. It resets the
+model and force history, settles for a second, presses the tab over two seconds,
+holds for a second, then opens the lid over five seconds. The finger follows the
+actual lid angle. Opening uses a separate hinge torque capped at **0.045 N m**;
+the plot measures only the finger load, not this hinge torque. The plan holds
+the lid open at the end. **X** stops the plan; a manual movement key also stops it.
+Before P is pressed, the model remains under manual control. Spring rigidities
+are `SUPPORT_RIGIDITY` and `CLIP_RIGIDITY` near the top of the file. These are illustrative simulation forces, not calibrated
+hardware measurements.
+
+[Opening video with force graph](media/snap_fit_opening.mp4) (720p, 30 fps).
+Regenerate it, the README GIF, and a CSV of the sensor readings using the same opening
+plan as the viewer:
+
+```bash
+MUJOCO_GL=egl uv run python examples/render_snap_fit.py
+```
+
+The simulation, video, and GIF use the shared carbon-and-flame palette. The GIF
+focuses on the mechanism for readability in the README table. The exporter
+requires `ffmpeg`. The larger viewer graph uses thicker lines;
+the finger weld uses a 1.5 ms response time and higher constraint impedance.
+
+
 [Airway and tendon-driven bronchoscope](bronchoscope.py): a flexible shaft above
 the tracheal inlet, with a translating, rotating base and a thinner tip steered by
 four pulling tendons. A lit camera at the tip provides a live video inset.
@@ -469,7 +512,9 @@ and a sustained final trefoil match. No optional knot-analysis package is needed
     <td><a href="physics/models/slider_crank/slider_crank.xml"><img src="media/slider_crank.gif" alt="slider_crank" width="280" height="210"></a></td>
   </tr>
   <tr>
-    <td colspan="3" align="center"><a href="bronchoscope.py"><img src="media/bronchoscope.gif" alt="Bronchoscope insertion with tip-camera view" width="280" height="210"></a></td>
+    <td><a href="bronchoscope.py"><img src="media/bronchoscope.gif" alt="Bronchoscope insertion with tip-camera view" width="280" height="210"></a></td>
+    <td><a href="snap_fit.py"><img src="media/snap_fit.gif" alt="Snap fit opening with a force-sensing finger" width="280" height="210"></a></td>
+    <td></td>
   </tr>
 </table>
 
